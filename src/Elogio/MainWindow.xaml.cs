@@ -16,6 +16,10 @@ public partial class MainWindow : FluentWindow
     private readonly MainViewModel _viewModel;
     private readonly INavigationService _navigationService;
     private readonly IKelioService _kelioService;
+    private readonly Snackbar _snackbar;
+
+    // Track current punch state: null = unknown, true = clocked in, false = clocked out
+    private bool? _punchState;
 
     public MainWindow(
         MainViewModel viewModel,
@@ -32,9 +36,12 @@ public partial class MainWindow : FluentWindow
 
         // Set up navigation service with the content frame
         _navigationService.SetFrame(ContentFrame);
-        
+
         // Initialize theme toggle state
         ThemeToggle.IsChecked = ApplicationThemeManager.GetAppTheme() == ApplicationTheme.Dark;
+
+        // Initialize Snackbar
+        _snackbar = new Snackbar(SnackbarPresenter);
     }
     
     /// <summary>
@@ -91,7 +98,7 @@ public partial class MainWindow : FluentWindow
         // Navigate to monthly calendar as default page
         _navigationService.Navigate<MonthlyCalendarPage>();
 
-        // Load today's balance
+        // Load today's balance and determine initial punch state
         _ = UpdateTodayBalanceAsync();
     }
 
@@ -137,6 +144,11 @@ public partial class MainWindow : FluentWindow
 
                     // Update time entries display
                     UpdateTimeEntriesDisplay(todayData.Entries);
+
+                    // Determine current punch state based on number of entries
+                    // Odd number of entries = clocked in, Even = clocked out
+                    _punchState = todayData.Entries != null && todayData.Entries.Count % 2 == 1;
+                    UpdatePunchButtonState();
                 }
             }
         }
@@ -148,6 +160,10 @@ public partial class MainWindow : FluentWindow
             TodayDifferenceText.Text = "";
             TimeEntriesPanel.Children.Clear();
             TimeEntriesSeparator.Visibility = Visibility.Collapsed;
+
+            // Keep unknown state on error - button stays disabled
+            _punchState = null;
+            UpdatePunchButtonState();
         }
     }
 
@@ -209,14 +225,119 @@ public partial class MainWindow : FluentWindow
         NavigateToLogin();
     }
 
-    private void ClockInButton_Click(object sender, RoutedEventArgs e)
+    private async void PunchButton_Click(object sender, RoutedEventArgs e)
     {
-        // TODO: Implement clock in when API supports it
+        await ExecutePunchAsync();
     }
 
-    private void ClockOutButton_Click(object sender, RoutedEventArgs e)
+    /// <summary>
+    /// Execute a punch operation and show toast notification with result.
+    /// </summary>
+    private async Task ExecutePunchAsync()
     {
-        // TODO: Implement clock out when API supports it
+        // Disable button during operation
+        PunchButton.IsEnabled = false;
+
+        try
+        {
+            var result = await _kelioService.PunchAsync();
+
+            if (result == null)
+            {
+                ShowErrorToast("Fehler", "Stempeln fehlgeschlagen. Bitte erneut versuchen.");
+                return;
+            }
+
+            if (result.Success)
+            {
+                var typeText = result.Type == Persistence.Dto.PunchType.ClockIn ? "Kommen" : "Gehen";
+                var timeText = result.Timestamp?.ToString("HH:mm") ?? "--:--";
+                var message = !string.IsNullOrEmpty(result.Message)
+                    ? result.Message
+                    : $"{typeText} um {timeText}";
+
+                ShowSuccessToast(result.Label ?? "Buchung erfolgreich", message);
+
+                // Update button state based on punch result
+                _punchState = result.Type == Persistence.Dto.PunchType.ClockIn;
+                UpdatePunchButtonState();
+
+                // Refresh today's balance display
+                await UpdateTodayBalanceAsync();
+            }
+            else
+            {
+                ShowErrorToast("Fehler", result.Message ?? "Stempeln fehlgeschlagen.");
+            }
+        }
+        catch (Exception ex)
+        {
+            ShowErrorToast("Fehler", $"Fehler: {ex.Message}");
+        }
+        finally
+        {
+            // Re-enable button
+            PunchButton.IsEnabled = true;
+        }
+    }
+
+    /// <summary>
+    /// Update the punch button appearance based on current state.
+    /// </summary>
+    private void UpdatePunchButtonState()
+    {
+        switch (_punchState)
+        {
+            case true:
+                // Currently clocked in -> show GEHEN button (red/danger)
+                PunchButton.Content = "GEHEN";
+                PunchButton.Appearance = ControlAppearance.Danger;
+                PunchButtonIcon.Symbol = SymbolRegular.ArrowExit20;
+                PunchButton.IsEnabled = true;
+                break;
+
+            case false:
+                // Currently clocked out -> show KOMMEN button (green/success)
+                PunchButton.Content = "KOMMEN";
+                PunchButton.Appearance = ControlAppearance.Success;
+                PunchButtonIcon.Symbol = SymbolRegular.ArrowEnter20;
+                PunchButton.IsEnabled = true;
+                break;
+
+            default:
+                // Unknown state -> show neutral disabled button
+                PunchButton.Content = "STEMPELN";
+                PunchButton.Appearance = ControlAppearance.Secondary;
+                PunchButtonIcon.Symbol = SymbolRegular.Clock24;
+                PunchButton.IsEnabled = false;
+                break;
+        }
+    }
+
+    /// <summary>
+    /// Show a success toast notification (green).
+    /// </summary>
+    private void ShowSuccessToast(string title, string message)
+    {
+        _snackbar.Title = title;
+        _snackbar.Content = message;
+        _snackbar.Appearance = ControlAppearance.Success;
+        _snackbar.Icon = new SymbolIcon(SymbolRegular.CheckmarkCircle24);
+        _snackbar.Timeout = TimeSpan.FromSeconds(4);
+        _snackbar.Show();
+    }
+
+    /// <summary>
+    /// Show an error toast notification (red).
+    /// </summary>
+    private void ShowErrorToast(string title, string message)
+    {
+        _snackbar.Title = title;
+        _snackbar.Content = message;
+        _snackbar.Appearance = ControlAppearance.Danger;
+        _snackbar.Icon = new SymbolIcon(SymbolRegular.ErrorCircle24);
+        _snackbar.Timeout = TimeSpan.FromSeconds(5);
+        _snackbar.Show();
     }
     
     private void ThemeToggle_Checked(object sender, RoutedEventArgs e)

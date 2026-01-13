@@ -53,6 +53,12 @@ public interface IKelioService
     /// Disconnect and clear authentication state.
     /// </summary>
     void Logout();
+
+    /// <summary>
+    /// Perform a punch operation (clock-in or clock-out).
+    /// The server determines whether it's a clock-in or clock-out based on current state.
+    /// </summary>
+    Task<PunchResultDto?> PunchAsync();
 }
 
 /// <summary>

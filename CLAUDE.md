@@ -64,13 +64,13 @@ await File.WriteAllTextAsync(path, body, utf8NoBom);
 
 ### Dynamic Employee ID
 
-**Problem:** Hardcoded employee ID (227) caused `ExceptionBWT` errors.
+**Problem:** Using a static employee ID caused `ExceptionBWT` errors because the ID is session-specific.
 
 **Root Cause:** The employee ID is session-specific and must be extracted from `GlobalBWTService.connect()` response.
 
-**Solution:** Call `GlobalBWTService.connect()` during login and extract employee ID from the response. The ID appears near the user's name in the GWT-RPC response.
+**Solution:** Call `GlobalBWTService.connect()` during login and extract employee ID from the response using pattern matching on the GWT-RPC data structure. If employee ID extraction fails, the API will return an error rather than using a fallback value.
 
-**File:** `src/Elogio.Core/Api/KelioClient.cs` - `GlobalBwtServiceConnectAsync()`, `ExtractEmployeeIdFromConnectResponse()`
+**File:** `src/Elogio.Persistence/Api/KelioClient.cs` - `GlobalBwtServiceConnectAsync()`, `ExtractEmployeeIdFromConnectResponse()`
 
 ### TLS Fingerprint Consistency
 
@@ -108,6 +108,7 @@ Decoding:
 - `GlobalBWTService.connect` - Returns employee ID and user info
 - `GlobalBWTService.getTraductions` - Translations (must be called before getSemaine)
 - `DeclarationPresenceCompteurBWTService.getSemaine` - Week presence/time data
+- `BadgerSignalerPortailBWTService.badgerSignaler` - Clock-in/clock-out punch (server determines direction)
 
 ## Running Tests
 
@@ -216,17 +217,56 @@ HTTP traffic is logged to: `%LOCALAPPDATA%\Elogio\http_log.txt`
 - **Error handling** - handle edge cases properly
 - **Performance awareness** - consider efficiency without premature optimization
 
-## CRITICAL: No Company Names in Code
+## CRITICAL: No Sensitive Data in Git
 
-**NEVER hardcode company names (like customer subdomains) in source code.**
+**NEVER commit sensitive data to the repository.**
 
-All customer-specific values must be:
-- Loaded from environment variables, user secrets, or config files
-- Stored outside of git (e.g., `.env`, User Secrets, `appsettings.local.json`)
+### Pre-Commit Review (MANDATORY)
 
-Examples:
-- Server URLs: `https://{company}.kelio.io` → load from config
-- Test credentials: Use User Secrets (`dotnet user-secrets`)
-- Python scripts: Use `.env` file (already in `.gitignore`)
+After implementing a feature, Claude MUST:
+1. Run `git diff` and `git status` to review all changes
+2. Identify files with potentially sensitive data
+3. **Point out any issues to Christopher** before committing
+4. Discuss how to handle each case (anonymize, gitignore, or delete)
 
-This prevents accidental exposure of customer information in the repository.
+### Sensitive Data Includes
+
+- **Employee IDs** (e.g., `958`, `852`) - real IDs from HAR captures
+- **Employee names** (e.g., `"Christopher"`, `"Goltz"`)
+- **Session IDs** (real GUIDs from captures)
+- **Company/Customer names** (subdomains like `pharmagest.kelio.io`)
+- **HAR files** and decoded API responses
+- **Credentials** of any kind
+
+### Handling Options
+
+| Option | When to Use |
+|--------|-------------|
+| **Anonymize** | Test fixtures: replace with fake data (`00000000-...`, `12345`) |
+| **Gitignore** | Generated files, decoded data, HAR captures |
+| **Delete** | Temp files, one-time analysis outputs |
+
+### Already in .gitignore
+
+```
+tools/python/decoded/     # Decoded HAR data
+tools/python/cookies.json # Session cookies
+tools/python/.env         # Python secrets
+*.har                     # HAR capture files
+```
+
+### For Production Code
+
+- Employee IDs: Extract dynamically from `GlobalBWTService.connect()`
+- Server URLs: Load from config, never hardcode customer subdomains
+- Credentials: Use User Secrets (`dotnet user-secrets`) or `.env`
+
+### For Test Fixtures
+
+Use clearly fake/generic data:
+```csharp
+private const string TestSessionId = "00000000-0000-0000-0000-000000000001";
+private const int TestEmployeeId = 12345;
+```
+
+This prevents accidental exposure of personal/customer information in the repository.

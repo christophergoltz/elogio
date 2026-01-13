@@ -20,8 +20,8 @@ public class GwtRpcRequestBuilder
     /// </summary>
     /// <param name="sessionId">The session ID from authentication</param>
     /// <param name="date">The date for the week (YYYYMMDD format integer)</param>
-    /// <param name="employeeId">The employee ID (default 227 from captures)</param>
-    public string BuildGetSemaineRequest(string sessionId, int date, int employeeId = 227)
+    /// <param name="employeeId">The employee ID (extracted from GlobalBWTService connect)</param>
+    public string BuildGetSemaineRequest(string sessionId, int date, int employeeId)
     {
         const string service = "com.bodet.bwt.app.portail.serveur.service.declaration.presence.DeclarationPresenceCompteurBWTService";
         const string method = "getSemaine";
@@ -55,7 +55,7 @@ public class GwtRpcRequestBuilder
 
         // Add data tokens
         // Format derived from captured requests:
-        // 0,1,2,2,20260105,3,4,227,5,6,5,7,5,8
+        // 0,1,2,2,{date},3,4,{employeeId},5,6,5,7,5,8
         sb.Append(",0,1,2,2,");
         sb.Append(date);
         sb.Append(",3,4,");
@@ -108,8 +108,8 @@ public class GwtRpcRequestBuilder
     /// </summary>
     /// <param name="sessionId">The session ID from authentication</param>
     /// <param name="prefix">Translation prefix (e.g., "global_", "app.portail.declaration_")</param>
-    /// <param name="employeeId">The employee ID</param>
-    public string BuildGetTraductionsRequest(string sessionId, string prefix, int employeeId = 227)
+    /// <param name="employeeId">The employee ID (extracted from GlobalBWTService connect)</param>
+    public string BuildGetTraductionsRequest(string sessionId, string prefix, int employeeId)
     {
         const string service = "com.bodet.bwt.global.serveur.service.GlobalBWTService";
         const string method = "getTraductions";
@@ -138,7 +138,7 @@ public class GwtRpcRequestBuilder
             sb.Append('"');
         }
 
-        // Data tokens from browser: 0,1,1,2,3,4,227,2,5,2,6,2,7
+        // Data tokens from browser: 0,1,1,2,3,4,{employeeId},2,5,2,6,2,7
         sb.Append(",0,1,1,2,3,4,");
         sb.Append(employeeId);
         sb.Append(",2,5,2,6,2,7");
@@ -252,6 +252,62 @@ public class GwtRpcRequestBuilder
     public static int ToKelioDate(DateTime date)
     {
         return date.Year * 10000 + date.Month * 100 + date.Day;
+    }
+
+    /// <summary>
+    /// Build a GWT-RPC request for the badgerSignaler method (clock-in/clock-out).
+    /// This triggers a punch operation - the server determines whether it's clock-in or clock-out
+    /// based on the employee's current state.
+    /// </summary>
+    /// <param name="sessionId">The session ID from authentication</param>
+    /// <param name="employeeId">The employee ID</param>
+    /// <remarks>
+    /// Service: com.bodet.bwt.portail.serveur.service.commun.vignette.presence.BadgerSignalerPortailBWTService
+    /// Method: badgerSignaler
+    ///
+    /// Request format (from HAR capture):
+    /// 9,"BWPRequest","List","NULL","Boolean","Integer","String","{sessionId}","badgerSignaler","{service}",
+    /// 0,1,3,2,2,3,0,4,{employeeId},5,6,5,7,5,8
+    /// </remarks>
+    public string BuildBadgerSignalerRequest(string sessionId, int employeeId)
+    {
+        const string service = "com.bodet.bwt.portail.serveur.service.commun.vignette.presence.BadgerSignalerPortailBWTService";
+        const string method = "badgerSignaler";
+
+        // String table based on captured HAR data
+        var strings = new List<string>
+        {
+            BwpRequestType,     // 0
+            JavaUtilList,       // 1
+            NullString,         // 2
+            "java.lang.Boolean",// 3
+            JavaLangInteger,    // 4
+            JavaLangString,     // 5
+            sessionId,          // 6
+            method,             // 7
+            service             // 8
+        };
+
+        var sb = new StringBuilder();
+        sb.Append(strings.Count);
+
+        foreach (var str in strings)
+        {
+            sb.Append(",\"");
+            sb.Append(EscapeString(str));
+            sb.Append('"');
+        }
+
+        // Data tokens from HAR capture analysis:
+        // 0,1 = BWPRequest, List (base types)
+        // 3,2,2,3,0 = Boolean(NULL, NULL, Boolean=false) - parameters before employeeId
+        // 4,{employeeId} = Integer with employee ID value
+        // 5,6,5,7,5,8 = String references for sessionId, method, service
+        sb.Append(",0,1,3,2,2,3,0,4,");
+        sb.Append(employeeId);
+        sb.Append(",5,6,5,7,5,8");
+
+        return sb.ToString();
     }
 
     private static string EscapeString(string value)

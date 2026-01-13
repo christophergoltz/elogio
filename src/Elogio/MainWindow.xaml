@@ -132,35 +132,16 @@
                                 </Grid>
                             </Border>
 
-                            <ui:Button x:Name="ClockInButton"
-                                       Content="KOMMEN"
-                                       Appearance="Primary"
-                                       HorizontalAlignment="Stretch"
-                                       Margin="0,0,0,8"
-                                       Click="ClockInButton_Click"
-                                       IsEnabled="False">
-                                <ui:Button.Icon>
-                                    <ui:SymbolIcon Symbol="ArrowEnter20" />
-                                </ui:Button.Icon>
-                            </ui:Button>
-
-                            <ui:Button x:Name="ClockOutButton"
-                                       Content="GEHEN"
+                            <ui:Button x:Name="PunchButton"
+                                       Content="STEMPELN"
                                        Appearance="Secondary"
                                        HorizontalAlignment="Stretch"
-                                       Click="ClockOutButton_Click"
-                                       IsEnabled="False">
+                                       IsEnabled="False"
+                                       Click="PunchButton_Click">
                                 <ui:Button.Icon>
-                                    <ui:SymbolIcon Symbol="ArrowExit20" />
+                                    <ui:SymbolIcon x:Name="PunchButtonIcon" Symbol="Clock24" />
                                 </ui:Button.Icon>
                             </ui:Button>
-
-                            <TextBlock Text="Clock In/Out coming soon"
-                                       FontSize="10"
-                                       HorizontalAlignment="Center"
-                                       Margin="0,6,0,0"
-                                       Foreground="{ui:ThemeResource TextFillColorSecondaryBrush}"
-                                       TextWrapping="Wrap" />
                         </StackPanel>
 
                         <!-- Navigation -->
@@ -258,6 +239,9 @@
                                Foreground="{ui:ThemeResource TextFillColorSecondaryBrush}" />
                 </StackPanel>
             </Grid>
+
+            <!-- Snackbar for toast notifications -->
+            <ui:SnackbarPresenter x:Name="SnackbarPresenter" />
         </Grid>
     </Grid>
 </ui:FluentWindow>

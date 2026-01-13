@@ -115,6 +115,17 @@ public class KelioService : IKelioService, IDisposable
         ClearCache();
     }
 
+    public async Task<PunchResultDto?> PunchAsync()
+    {
+        if (_client == null || !IsAuthenticated)
+        {
+            Log.Warning("PunchAsync: Client not authenticated");
+            return null;
+        }
+
+        return await _client.PunchAsync();
+    }
+
     private async Task<MonthData> FetchMonthDataInternalAsync(int year, int month)
     {
         var weeks = GetWeeksInMonth(year, month);

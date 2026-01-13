@@ -29,6 +29,7 @@ public partial class KelioClient : IDisposable
     private readonly CookieContainer _cookieContainer;
     private readonly GwtRpcRequestBuilder _requestBuilder = new();
     private readonly SemainePresenceParser _presenceParser = new();
+    private readonly BadgerSignalerResponseParser _punchParser = new();
     private readonly BwpCodec _bwpCodec = new();
     private readonly string _baseUrl;
 
@@ -464,7 +465,7 @@ public partial class KelioClient : IDisposable
 
     /// <summary>
     /// Extract the dynamic employee ID from GlobalBWTService connect response.
-    /// The employee ID appears near the end of the response, right before the user's name.
+    /// The employee ID appears near the END of the data tokens, before the user's name.
     /// Pattern: [..., TYPE_REF, EMPLOYEE_ID, TYPE_REF, FIRSTNAME_IDX, TYPE_REF, LASTNAME_IDX, ...]
     /// </summary>
     private int ExtractEmployeeIdFromConnectResponse(string responseBody)
@@ -477,7 +478,7 @@ public partial class KelioClient : IDisposable
             if (!int.TryParse(parts[0], out var stringCount))
                 return 0;
 
-            // Extract strings to find user name indices
+            // Extract strings (we need to skip past them to get to data tokens)
             var strings = new List<string>();
             var idx = 1;
             while (idx < parts.Length && strings.Count < stringCount)
@@ -501,56 +502,76 @@ public partial class KelioClient : IDisposable
                 idx++;
             }
 
-            // Find indices for user name parts (Christopher, Goltz)
-            int firstnameIdx = -1, lastnameIdx = -1;
-            for (var i = 0; i < strings.Count; i++)
-            {
-                if (strings[i] == "Christopher")
-                    firstnameIdx = i;
-                else if (strings[i] == "Goltz")
-                    lastnameIdx = i;
-            }
-
-            if (firstnameIdx < 0 || lastnameIdx < 0)
-            {
-                // Try to find any name by looking for patterns in the response
-                // Fall back to default if we can't find the name
-                return 0;
-            }
-
             // Get data tokens (after all strings)
             var dataTokens = parts[idx..].Select(p => p.Trim()).ToList();
 
-            // Find the employee ID by looking for the firstname reference
-            // Pattern: ..., TYPE_REF, EMPLOYEE_ID, SMALL_TYPE_REF, FIRSTNAME_IDX, ...
-            for (var i = 0; i < dataTokens.Count; i++)
-            {
-                if (dataTokens[i] == firstnameIdx.ToString())
-                {
-                    // Found firstname reference at position i
-                    // Look backwards: i-1 should be type ref (4), i-2 should be employee ID
-                    if (i >= 2)
-                    {
-                        var typeRef = dataTokens[i - 1];
-                        var employeeIdCandidate = dataTokens[i - 2];
+            // Find the last two name strings (firstname, lastname) - they're at the very end
+            // These are strings that look like personal names (capitalized, no dots, etc.)
+            var lastNameStrIdx = -1;
+            var firstNameStrIdx = -1;
 
-                        // Validate: type_ref should be small (like 4), employee_id should be 3-4 digits
-                        if (int.TryParse(typeRef, out var typeRefInt) && typeRefInt < 20 &&
-                            int.TryParse(employeeIdCandidate, out var employeeId) &&
-                            employeeId >= 100 && employeeId <= 9999)
-                        {
-                            return employeeId;
-                        }
+            // Search backwards for two consecutive name-like strings
+            for (var i = strings.Count - 1; i >= 1; i--)
+            {
+                var s = strings[i];
+                // Name strings: capitalized, no dots, reasonable length, not type names
+                if (!s.Contains('.') && s != "NULL" && !string.IsNullOrWhiteSpace(s) &&
+                    s.Length >= 2 && s.Length <= 30 &&
+                    !s.Contains("java") && !s.Contains("com") && !s.Contains("ENUM") &&
+                    char.IsUpper(s[0]) && !s.All(char.IsUpper)) // Starts with capital but not ALL CAPS
+                {
+                    if (lastNameStrIdx < 0)
+                    {
+                        lastNameStrIdx = i;
                     }
-                    break;
+                    else if (firstNameStrIdx < 0)
+                    {
+                        firstNameStrIdx = i;
+                        break; // Found both
+                    }
                 }
             }
 
+            _ = LogDebugAsync($"ExtractEmployeeId: firstName=[{firstNameStrIdx}] '{(firstNameStrIdx >= 0 ? strings[firstNameStrIdx] : "?")}', lastName=[{lastNameStrIdx}] '{(lastNameStrIdx >= 0 ? strings[lastNameStrIdx] : "?")}'");
+
+            if (firstNameStrIdx < 0 || lastNameStrIdx < 0)
+            {
+                _ = LogDebugAsync("ExtractEmployeeId: Could not find name strings!");
+                return 0;
+            }
+
+            // Log last 50 data tokens for analysis
+            _ = LogDebugAsync($"ExtractEmployeeId: Last 50 data tokens: {string.Join(",", dataTokens.TakeLast(50))}");
+
+            // Find pattern: EMPLOYEE_ID, 4, firstNameStrIdx, 4, lastNameStrIdx
+            // Search for the firstname index in data tokens, then look backwards for employee ID
+            for (var i = dataTokens.Count - 1; i >= 2; i--)
+            {
+                if (!int.TryParse(dataTokens[i], out var tokenVal))
+                    continue;
+
+                // Found firstname index reference
+                if (tokenVal == firstNameStrIdx)
+                {
+                    // Pattern should be: EMPLOYEE_ID, 4, firstNameStrIdx, 4, lastNameStrIdx
+                    // So employee ID is at i-2
+                    if (i >= 2 &&
+                        int.TryParse(dataTokens[i - 1], out var typeRef) && typeRef == 4 &&
+                        int.TryParse(dataTokens[i - 2], out var employeeId) &&
+                        employeeId >= 100 && employeeId <= 9999)
+                    {
+                        _ = LogDebugAsync($"ExtractEmployeeId: Found employee ID {employeeId} before name pattern at pos {i-2}");
+                        return employeeId;
+                    }
+                }
+            }
+
+            _ = LogDebugAsync("ExtractEmployeeId: No valid employee ID found!");
             return 0;
         }
         catch (Exception ex)
         {
-            // Log but don't fail - we can try with default ID
+            // Log the error for debugging
             _ = LogDebugAsync($"ExtractEmployeeIdFromConnectResponse error: {ex.Message}");
             return 0;
         }
@@ -602,11 +623,17 @@ public partial class KelioClient : IDisposable
 
         var kelioDate = GwtRpcRequestBuilder.ToKelioDate(date);
 
-        // Use dynamic employee ID from GlobalBWTService connect (or fallback to 227)
-        var effectiveEmployeeId = _employeeId > 0 ? _employeeId : 227;
-        var gwtRequest = _requestBuilder.BuildGetSemaineRequest(_sessionId, kelioDate, effectiveEmployeeId);
+        // Use dynamic employee ID from GlobalBWTService connect
+        if (_employeeId <= 0)
+        {
+            await LogDebugAsync("GetWeekPresence: Employee ID not set - GlobalBWTService connect may have failed");
+            throw new InvalidOperationException(
+                "Employee ID not available. The GlobalBWTService connect call may have failed during login.");
+        }
 
-        await LogDebugAsync($"GetSemaine GWT request with employeeId={effectiveEmployeeId}: {gwtRequest}");
+        var gwtRequest = _requestBuilder.BuildGetSemaineRequest(_sessionId, kelioDate, _employeeId);
+
+        await LogDebugAsync($"GetSemaine GWT request with employeeId={_employeeId}: {gwtRequest}");
 
         var response = await SendGwtRequestAsync(gwtRequest);
 
@@ -660,6 +687,83 @@ public partial class KelioClient : IDisposable
 
         var gwtRequest = _requestBuilder.BuildGetServerTimeRequest(_sessionId);
         return await SendGwtRequestAsync(gwtRequest);
+    }
+
+    /// <summary>
+    /// Punch (clock in or clock out).
+    /// The server automatically determines whether this is a clock-in or clock-out
+    /// based on the employee's current state.
+    /// </summary>
+    /// <returns>Result of the punch operation including type (ClockIn/ClockOut) and timestamp</returns>
+    public async Task<PunchResultDto?> PunchAsync()
+    {
+        if (!_isAuthenticated || string.IsNullOrEmpty(_sessionId))
+        {
+            throw new InvalidOperationException("Not authenticated. Call LoginAsync first.");
+        }
+
+        // Use dynamic employee ID from GlobalBWTService connect
+        if (_employeeId <= 0)
+        {
+            await LogDebugAsync("PUNCH ERROR: Employee ID not set - GlobalBWTService connect may have failed");
+            return new PunchResultDto
+            {
+                Success = false,
+                Type = PunchType.Unknown,
+                Error = "Employee ID not available. The GlobalBWTService connect call may have failed during login."
+            };
+        }
+
+        await LogDebugAsync($"=== PUNCH OPERATION START ===");
+        await LogDebugAsync($"Punch: SessionId={_sessionId}, EmployeeId={_employeeId}");
+
+        var gwtRequest = _requestBuilder.BuildBadgerSignalerRequest(_sessionId, _employeeId);
+
+        await LogDebugAsync($"Punch GWT request: {gwtRequest}");
+
+        var response = await SendGwtRequestAsync(gwtRequest);
+
+        await LogDebugAsync($"Punch raw response length: {response.Length}");
+        await LogDebugAsync($"Punch raw response: {response}");
+
+        // Check for ExceptionBWT
+        if (response.Contains("ExceptionBWT"))
+        {
+            await LogDebugAsync("PUNCH ERROR: Server returned ExceptionBWT!");
+            await LogDebugAsync($"=== PUNCH OPERATION FAILED ===");
+            return new PunchResultDto
+            {
+                Success = false,
+                Type = PunchType.Unknown,
+                Error = "Server returned ExceptionBWT - see log for full response"
+            };
+        }
+
+        var result = _punchParser.Parse(response);
+
+        if (result == null)
+        {
+            await LogDebugAsync("PUNCH ERROR: Parser returned null - response format may be unexpected");
+            await LogDebugAsync($"=== PUNCH OPERATION FAILED ===");
+            return new PunchResultDto
+            {
+                Success = false,
+                Type = PunchType.Unknown,
+                Error = "Failed to parse server response - see log for details"
+            };
+        }
+
+        await LogDebugAsync($"Punch result: Success={result.Success}, Type={result.Type}");
+        await LogDebugAsync($"Punch result: Timestamp={result.Timestamp}, Date={result.Date}");
+        await LogDebugAsync($"Punch result: Message={result.Message}");
+        await LogDebugAsync($"Punch result: Label={result.Label}");
+        if (!string.IsNullOrEmpty(result.Error))
+        {
+            await LogDebugAsync($"Punch result: Error={result.Error}");
+        }
+        await LogDebugAsync($"=== PUNCH OPERATION {(result.Success ? "SUCCESS" : "FAILED")} ===");
+
+        return result;
     }
 
     /// <summary>
