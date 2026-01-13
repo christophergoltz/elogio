@@ -125,9 +125,96 @@ HTTP traffic is logged to: `%LOCALAPPDATA%\Elogio\http_log.txt`
 
 ## Git Workflow
 
-- Christopher handles commits
+- Christopher handles all commits (Claude has read-only git access)
 - Suggest conventional commit messages: `type(scope): description`
 - Comments in code must be in English
+
+---
+
+## Development Process: 5-Phase System
+
+**ALWAYS follow this structured approach for any implementation task.**
+
+### Phase 1: Requirements Analysis
+
+**Goal:** Fully understand what needs to be done.
+
+- Analyze the requirement thoroughly
+- Ask clarifying questions if ANYTHING is unclear
+- **NEVER start with incomplete understanding**
+- No half-measures - either fully understand or ask first
+- Document assumptions and constraints
+
+### Phase 2: Current State Analysis
+
+**Goal:** Understand the existing codebase.
+
+- Analyze relevant existing code
+- Identify affected components and dependencies
+- Understand current architecture patterns in use
+- Note any technical debt or constraints
+
+### Phase 3: Solution Design
+
+**Goal:** Define HOW to implement the solution.
+
+- If multiple approaches exist:
+  - Present options with pros/cons
+  - Include personal recommendation with reasoning
+  - Reference community best practices where relevant
+  - **Decide together** before proceeding
+- Keep discussion architectural (no code examples unless requested)
+- Consider impact on existing code
+- Identify potential risks
+
+### Phase 4: Implementation Plan
+
+**Goal:** Create a concrete, actionable plan.
+
+- Based on the agreed solution from Phase 3
+- Break down into specific steps
+- Identify files to create/modify
+- Define order of implementation
+- Plan for testing approach
+
+### Phase 5: Implementation
+
+**Goal:** Execute the plan with quality.
+
+- Implement according to the plan
+- Write clean, tested code
+- After completion: suggest a **Conventional Commit** message
+- Format: `type(scope): description`
+- Types: `feat`, `fix`, `refactor`, `test`, `docs`, `chore`
+
+---
+
+## Code Quality Standards
+
+### Clean Code Principles
+
+- **Readable:** Code should be self-documenting
+- **Simple:** Prefer simple solutions over clever ones
+- **DRY:** Don't Repeat Yourself - but don't over-abstract either
+- **Small Functions:** Each function does one thing well
+- **Meaningful Names:** Variables, methods, classes have clear intent
+- **No Magic Numbers:** Use constants with descriptive names
+
+### SOLID Principles
+
+- **S**ingle Responsibility: One class, one reason to change
+- **O**pen/Closed: Open for extension, closed for modification
+- **L**iskov Substitution: Subtypes must be substitutable for base types
+- **I**nterface Segregation: Many specific interfaces over one general
+- **D**ependency Inversion: Depend on abstractions, not concretions
+
+### Quality Expectations
+
+- **No quick hacks** - take time to do it right
+- **Testable code** - design for testability
+- **Consistent patterns** - follow existing project conventions
+- **Error handling** - handle edge cases properly
+- **Performance awareness** - consider efficiency without premature optimization
 
 ## CRITICAL: No Company Names in Code
 
