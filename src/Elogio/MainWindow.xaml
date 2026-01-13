@@ -1,0 +1,263 @@
+<ui:FluentWindow x:Class="Elogio.Desktop.MainWindow"
+                 xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+                 xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+                 xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
+                 xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
+                 xmlns:ui="http://schemas.lepo.co/wpfui/2022/xaml"
+                 mc:Ignorable="d"
+                 Title="Elogio - Kelio Client"
+                 Height="700" Width="1100"
+                 MinHeight="500" MinWidth="800"
+                 WindowStartupLocation="CenterScreen"
+                 ExtendsContentIntoTitleBar="True"
+                 WindowBackdropType="Mica">
+
+    <Grid>
+        <Grid.RowDefinitions>
+            <RowDefinition Height="Auto" />
+            <RowDefinition Height="*" />
+        </Grid.RowDefinitions>
+
+        <!-- Title Bar -->
+        <ui:TitleBar Grid.Row="0"
+                     Title="Elogio"
+                     ShowMaximize="True"
+                     ShowMinimize="True" />
+
+        <!-- Main Content Area -->
+        <Grid Grid.Row="1">
+            <!-- Main layout with sidebar (hidden during login) -->
+            <Grid x:Name="MainLayout" Visibility="Collapsed">
+                <Grid.ColumnDefinitions>
+                    <ColumnDefinition Width="210" />
+                    <ColumnDefinition Width="*" />
+                </Grid.ColumnDefinitions>
+
+                <!-- Sidebar -->
+                <Border Grid.Column="0"
+                        Background="{ui:ThemeResource ControlFillColorDefaultBrush}"
+                        BorderBrush="{ui:ThemeResource ControlStrokeColorDefaultBrush}"
+                        BorderThickness="0,0,1,0">
+                    <Grid>
+                        <Grid.RowDefinitions>
+                            <RowDefinition Height="Auto" />
+                            <RowDefinition Height="Auto" />
+                            <RowDefinition Height="*" />
+                            <RowDefinition Height="Auto" />
+                        </Grid.RowDefinitions>
+
+                        <!-- Employee info -->
+                        <StackPanel Grid.Row="0" Margin="12">
+                            <Grid>
+                                <Grid.ColumnDefinitions>
+                                    <ColumnDefinition Width="Auto" />
+                                    <ColumnDefinition Width="*" />
+                                </Grid.ColumnDefinitions>
+                                <ui:SymbolIcon Grid.Column="0" Symbol="Person24" FontSize="32" VerticalAlignment="Top" />
+                                <TextBlock Grid.Column="1"
+                                           x:Name="EmployeeNameText"
+                                           Text="Employee"
+                                           VerticalAlignment="Center"
+                                           Margin="10,0,0,0"
+                                           FontSize="16"
+                                           FontWeight="SemiBold"
+                                           TextWrapping="Wrap" />
+                            </Grid>
+                        </StackPanel>
+
+                        <!-- Today's Balance + Kommen/Gehen Buttons -->
+                        <StackPanel Grid.Row="1" Margin="12,0,12,12">
+                            <!-- Today's Balance -->
+                            <Border Background="{ui:ThemeResource ControlFillColorDefaultBrush}"
+                                    CornerRadius="4"
+                                    Padding="12,8"
+                                    Margin="0,0,0,12">
+                                <Grid>
+                                    <Grid.RowDefinitions>
+                                        <RowDefinition Height="Auto" />
+                                        <RowDefinition Height="Auto" />
+                                    </Grid.RowDefinitions>
+                                    <Grid.ColumnDefinitions>
+                                        <ColumnDefinition Width="*" />
+                                        <ColumnDefinition Width="Auto" />
+                                        <ColumnDefinition Width="*" />
+                                    </Grid.ColumnDefinitions>
+
+                                    <!-- Today label spanning both columns -->
+                                    <TextBlock Grid.Row="0" Grid.ColumnSpan="3"
+                                               Text="Today"
+                                               FontSize="11"
+                                               Foreground="{ui:ThemeResource TextFillColorSecondaryBrush}"
+                                               HorizontalAlignment="Center"
+                                               Margin="0,0,0,6" />
+
+                                    <!-- Time entries (left side) -->
+                                    <StackPanel x:Name="TimeEntriesPanel" Grid.Row="1" Grid.Column="0"
+                                                VerticalAlignment="Center" HorizontalAlignment="Center">
+                                        <!-- Will be populated dynamically -->
+                                    </StackPanel>
+
+                                    <!-- Separator (centered) -->
+                                    <Border Grid.Row="1" Grid.Column="1"
+                                            Width="1"
+                                            Background="{ui:ThemeResource ControlStrokeColorDefaultBrush}"
+                                            Margin="10,0"
+                                            x:Name="TimeEntriesSeparator"
+                                            Visibility="Collapsed" />
+
+                                    <!-- Balance info (right side) -->
+                                    <StackPanel Grid.Row="1" Grid.Column="2" HorizontalAlignment="Center" VerticalAlignment="Center">
+                                        <!-- Worked / Expected -->
+                                        <StackPanel Orientation="Horizontal" HorizontalAlignment="Center">
+                                            <TextBlock x:Name="TodayWorkedText"
+                                                       Text="0:00"
+                                                       FontSize="18"
+                                                       FontWeight="SemiBold"
+                                                       Foreground="{ui:ThemeResource TextFillColorPrimaryBrush}" />
+                                            <TextBlock x:Name="TodayExpectedText"
+                                                       Text="/ 7:00"
+                                                       FontSize="12"
+                                                       Margin="4,0,0,0"
+                                                       VerticalAlignment="Bottom"
+                                                       Foreground="{ui:ThemeResource TextFillColorTertiaryBrush}" />
+                                        </StackPanel>
+                                        <!-- Difference -->
+                                        <TextBlock x:Name="TodayDifferenceText"
+                                                   Text="(-7:00)"
+                                                   FontSize="11"
+                                                   HorizontalAlignment="Center"
+                                                   Margin="0,2,0,0"
+                                                   Foreground="{ui:ThemeResource TextFillColorSecondaryBrush}" />
+                                    </StackPanel>
+                                </Grid>
+                            </Border>
+
+                            <ui:Button x:Name="ClockInButton"
+                                       Content="KOMMEN"
+                                       Appearance="Primary"
+                                       HorizontalAlignment="Stretch"
+                                       Margin="0,0,0,8"
+                                       Click="ClockInButton_Click"
+                                       IsEnabled="False">
+                                <ui:Button.Icon>
+                                    <ui:SymbolIcon Symbol="ArrowEnter20" />
+                                </ui:Button.Icon>
+                            </ui:Button>
+
+                            <ui:Button x:Name="ClockOutButton"
+                                       Content="GEHEN"
+                                       Appearance="Secondary"
+                                       HorizontalAlignment="Stretch"
+                                       Click="ClockOutButton_Click"
+                                       IsEnabled="False">
+                                <ui:Button.Icon>
+                                    <ui:SymbolIcon Symbol="ArrowExit20" />
+                                </ui:Button.Icon>
+                            </ui:Button>
+
+                            <TextBlock Text="Clock In/Out coming soon"
+                                       FontSize="10"
+                                       HorizontalAlignment="Center"
+                                       Margin="0,6,0,0"
+                                       Foreground="{ui:ThemeResource TextFillColorSecondaryBrush}"
+                                       TextWrapping="Wrap" />
+                        </StackPanel>
+
+                        <!-- Navigation -->
+                        <StackPanel Grid.Row="2" Margin="6,0">
+                            <ui:Button x:Name="MonthlyCalendarButton"
+                                       Content="Monthly Calendar"
+                                       Appearance="Transparent"
+                                       HorizontalAlignment="Stretch"
+                                       HorizontalContentAlignment="Left"
+                                       Click="MonthlyCalendarButton_Click">
+                                <ui:Button.Icon>
+                                    <ui:SymbolIcon Symbol="CalendarLtr24" />
+                                </ui:Button.Icon>
+                            </ui:Button>
+                        </StackPanel>
+
+                        <!-- Footer -->
+                        <StackPanel Grid.Row="3" Margin="6,0,6,12">
+                            <!-- Theme Toggle -->
+                            <Grid Margin="6,0,6,12">
+                                <Grid.ColumnDefinitions>
+                                    <ColumnDefinition Width="Auto" />
+                                    <ColumnDefinition Width="*" />
+                                    <ColumnDefinition Width="Auto" />
+                                </Grid.ColumnDefinitions>
+                                <ui:SymbolIcon Grid.Column="0" 
+                                               x:Name="ThemeIcon"
+                                               Symbol="WeatherMoon24" 
+                                               FontSize="18"
+                                               VerticalAlignment="Center" />
+                                <TextBlock Grid.Column="1" 
+                                           x:Name="ThemeLabel"
+                                           Text="Dark Mode" 
+                                           VerticalAlignment="Center"
+                                           Margin="8,0,0,0" />
+                                <ui:ToggleSwitch x:Name="ThemeToggle"
+                                              Grid.Column="2"
+                                              IsChecked="True"
+                                              Checked="ThemeToggle_Checked"
+                                              Unchecked="ThemeToggle_Unchecked" />
+                            </Grid>
+                            
+                            <ui:Button Content="Settings"
+                                       Appearance="Transparent"
+                                       HorizontalAlignment="Stretch"
+                                       HorizontalContentAlignment="Left"
+                                       IsEnabled="False">
+                                <ui:Button.Icon>
+                                    <ui:SymbolIcon Symbol="Settings24" />
+                                </ui:Button.Icon>
+                            </ui:Button>
+
+                            <!-- Separator -->
+                            <Separator Margin="0,8,0,8" />
+
+                            <ui:Button Content="Logout"
+                                       Appearance="Transparent"
+                                       HorizontalAlignment="Stretch"
+                                       HorizontalContentAlignment="Left"
+                                       Click="LogoutButton_Click">
+                                <ui:Button.Icon>
+                                    <ui:SymbolIcon Symbol="SignOut24" />
+                                </ui:Button.Icon>
+                            </ui:Button>
+                        </StackPanel>
+                    </Grid>
+                </Border>
+
+                <!-- Content Frame -->
+                <Frame Grid.Column="1"
+                       x:Name="ContentFrame"
+                       NavigationUIVisibility="Hidden" />
+            </Grid>
+
+            <!-- Login Frame (shown when not authenticated) -->
+            <Frame x:Name="LoginFrame"
+                   NavigationUIVisibility="Hidden"
+                   Visibility="Visible" />
+                   
+            <!-- Loading Overlay (for auto-login) -->
+            <Grid x:Name="LoadingOverlay" Visibility="Collapsed" Background="{ui:ThemeResource ApplicationBackgroundBrush}">
+                <StackPanel VerticalAlignment="Center" HorizontalAlignment="Center">
+                    <TextBlock Text="ELOGIO"
+                               FontSize="32"
+                               FontWeight="Bold"
+                               HorizontalAlignment="Center"
+                               Foreground="{ui:ThemeResource TextFillColorPrimaryBrush}" />
+                    <ui:ProgressRing IsIndeterminate="True"
+                                     Width="40" Height="40"
+                                     Margin="0,24,0,0" />
+                    <TextBlock Text="Connecting..."
+                               FontSize="14"
+                               HorizontalAlignment="Center"
+                               Margin="0,16,0,0"
+                               Foreground="{ui:ThemeResource TextFillColorSecondaryBrush}" />
+                </StackPanel>
+            </Grid>
+        </Grid>
+    </Grid>
+</ui:FluentWindow>

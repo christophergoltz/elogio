@@ -416,3 +416,10 @@ FodyWeavers.xsd
 *.msix
 *.msm
 *.msp
+.idea
+
+# Project-specific
+tools/python/cookies.json
+tools/python/.env
+docs/api_capture.har
+docs/api_discovery.json

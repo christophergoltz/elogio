@@ -1,0 +1,254 @@
+using Elogio.Core.Api;
+using Elogio.Core.Models;
+using Serilog;
+
+namespace Elogio.Desktop.Services;
+
+/// <summary>
+/// Kelio API service implementation wrapping KelioClient.
+/// </summary>
+public class KelioService : IKelioService, IDisposable
+{
+    private KelioClient? _client;
+    private string? _employeeName;
+
+    // Session-only cache for month data to speed up navigation
+    private readonly Dictionary<(int year, int month), MonthData> _monthCache = new();
+
+    public bool IsAuthenticated => _client?.SessionId != null;
+    public string? EmployeeName => _employeeName;
+    public int? EmployeeId => _client?.EmployeeId;
+
+    public async Task<bool> LoginAsync(string serverUrl, string username, string password)
+    {
+        // Dispose previous client if exists
+        _client?.Dispose();
+
+        _client = new KelioClient(serverUrl);
+        var success = await _client.LoginAsync(username, password);
+
+        if (success)
+        {
+            // Try to get employee name from first week data
+            var weekData = await _client.GetCurrentWeekPresenceAsync();
+            _employeeName = weekData?.EmployeeName;
+        }
+
+        return success;
+    }
+
+    public async Task<WeekPresence?> GetWeekPresenceAsync(DateOnly date)
+    {
+        if (_client == null || !IsAuthenticated)
+            return null;
+
+        return await _client.GetWeekPresenceAsync(date);
+    }
+
+    public async Task<MonthData> GetMonthDataAsync(int year, int month)
+    {
+        var key = (year, month);
+
+        // Check cache first
+        if (_monthCache.TryGetValue(key, out var cached))
+        {
+            Log.Information("GetMonthDataAsync: Returning cached data for {Year}-{Month}", year, month);
+            return cached;
+        }
+
+        Log.Information("GetMonthDataAsync called for {Year}-{Month}, IsAuthenticated={IsAuth}",
+            year, month, IsAuthenticated);
+
+        if (_client == null || !IsAuthenticated)
+        {
+            Log.Warning("GetMonthDataAsync: Client not authenticated, returning empty data");
+            return new MonthData { Year = year, Month = month };
+        }
+
+        var data = await FetchMonthDataInternalAsync(year, month);
+
+        // Store in cache
+        _monthCache[key] = data;
+
+        return data;
+    }
+
+    public void PrefetchAdjacentMonths(int year, int month)
+    {
+        if (_client == null || !IsAuthenticated)
+            return;
+
+        // Prefetch previous month in background
+        var (prevYear, prevMonth) = GetPreviousMonth(year, month);
+        var prevKey = (prevYear, prevMonth);
+
+        if (!_monthCache.ContainsKey(prevKey))
+        {
+            Log.Information("Prefetching previous month {Year}-{Month}", prevYear, prevMonth);
+            _ = Task.Run(async () =>
+            {
+                try
+                {
+                    var data = await FetchMonthDataInternalAsync(prevYear, prevMonth);
+                    _monthCache[prevKey] = data;
+                    Log.Information("Prefetch complete for {Year}-{Month}", prevYear, prevMonth);
+                }
+                catch (Exception ex)
+                {
+                    Log.Warning(ex, "Prefetch failed for {Year}-{Month}", prevYear, prevMonth);
+                }
+            });
+        }
+    }
+
+    public void ClearCache()
+    {
+        _monthCache.Clear();
+        Log.Information("Month cache cleared");
+    }
+
+    public void Logout()
+    {
+        _client?.Dispose();
+        _client = null;
+        _employeeName = null;
+        ClearCache();
+    }
+
+    private async Task<MonthData> FetchMonthDataInternalAsync(int year, int month)
+    {
+        var weeks = GetWeeksInMonth(year, month);
+        Log.Information("FetchMonthDataInternalAsync: Fetching {WeekCount} weeks for {Year}-{Month}: {WeekStarts}",
+            weeks.Count, year, month, string.Join(", ", weeks.Select(w => w.ToString("yyyy-MM-dd"))));
+
+        var allDays = new List<DayPresence>();
+        var seenDates = new HashSet<DateOnly>();
+        var successfulWeeks = 0;
+        var failedWeeks = 0;
+
+        // Fetch weeks with limited parallelism (2 at a time) to avoid overwhelming the API
+        var semaphore = new SemaphoreSlim(2);
+        var weekTasks = weeks.Select(async weekStart =>
+        {
+            await semaphore.WaitAsync();
+            try
+            {
+                Log.Debug("Fetching week starting {WeekStart}", weekStart);
+                var result = await _client!.GetWeekPresenceAsync(weekStart);
+                if (result != null)
+                {
+                    Log.Information("Fetched week {WeekStart}: {DayCount} days, dates: {Dates}",
+                        weekStart, result.Days?.Count ?? 0,
+                        result.Days != null ? string.Join(", ", result.Days.Select(d => d.Date.ToString("MM-dd"))) : "none");
+                }
+                else
+                {
+                    Log.Warning("Fetched week {WeekStart}: returned NULL", weekStart);
+                }
+                return (weekStart, result);
+            }
+            catch (Exception ex)
+            {
+                Log.Error(ex, "Failed to fetch week {WeekStart}", weekStart);
+                return (weekStart, (WeekPresence?)null);
+            }
+            finally
+            {
+                semaphore.Release();
+            }
+        }).ToList();
+
+        var weekResults = await Task.WhenAll(weekTasks);
+        Log.Information("FetchMonthDataInternalAsync: Got {ResultCount} week results", weekResults.Length);
+
+        foreach (var (weekStart, weekData) in weekResults)
+        {
+            if (weekData == null)
+            {
+                Log.Warning("FetchMonthDataInternalAsync: Week {WeekStart} returned null", weekStart);
+                failedWeeks++;
+                continue;
+            }
+
+            successfulWeeks++;
+
+            // Update employee name if we got it
+            if (string.IsNullOrEmpty(_employeeName) && !string.IsNullOrEmpty(weekData.EmployeeName))
+            {
+                _employeeName = weekData.EmployeeName;
+            }
+
+            // Filter to only days in the target month, avoiding duplicates
+            var daysInMonth = weekData.Days.Where(d => d.Date.Month == month && d.Date.Year == year).ToList();
+            foreach (var day in daysInMonth)
+            {
+                if (seenDates.Add(day.Date))
+                {
+                    allDays.Add(day);
+                }
+            }
+            Log.Debug("Week {WeekStart}: Added {Count} days for {Year}-{Month}", weekStart, daysInMonth.Count, year, month);
+        }
+
+        Log.Information("FetchMonthDataInternalAsync: {SuccessCount} weeks succeeded, {FailedCount} weeks failed",
+            successfulWeeks, failedWeeks);
+
+        // Sort by date
+        allDays = allDays.OrderBy(d => d.Date).ToList();
+
+        var monthData = new MonthData
+        {
+            Year = year,
+            Month = month,
+            Days = allDays
+        };
+
+        Log.Information("FetchMonthDataInternalAsync: Returning {DayCount} days for {Year}-{Month}. " +
+            "Dates: {Dates}. TotalWorked: {TotalWorked}, TotalExpected: {TotalExpected}, Balance: {Balance}",
+            allDays.Count, year, month,
+            string.Join(", ", allDays.Select(d => d.Date.ToString("MM-dd"))),
+            monthData.TotalWorked, monthData.TotalExpected, monthData.Balance);
+
+        return monthData;
+    }
+
+    private static (int year, int month) GetPreviousMonth(int year, int month)
+    {
+        if (month == 1)
+            return (year - 1, 12);
+        return (year, month - 1);
+    }
+
+    public void Dispose()
+    {
+        _client?.Dispose();
+        _client = null;
+        GC.SuppressFinalize(this);
+    }
+
+    /// <summary>
+    /// Get all week start dates that overlap with the given month.
+    /// </summary>
+    private static List<DateOnly> GetWeeksInMonth(int year, int month)
+    {
+        var weeks = new List<DateOnly>();
+        var firstDayOfMonth = new DateOnly(year, month, 1);
+        var lastDayOfMonth = firstDayOfMonth.AddMonths(1).AddDays(-1);
+
+        // Find the Monday of the week containing the first day
+        var currentWeekStart = firstDayOfMonth.AddDays(-(int)firstDayOfMonth.DayOfWeek + (int)DayOfWeek.Monday);
+        if (currentWeekStart > firstDayOfMonth)
+        {
+            currentWeekStart = currentWeekStart.AddDays(-7);
+        }
+
+        // Add all weeks that overlap with the month
+        while (currentWeekStart <= lastDayOfMonth)
+        {
+            weeks.Add(currentWeekStart);
+            currentWeekStart = currentWeekStart.AddDays(7);
+        }
+
+        return weeks;
+    }
+}
