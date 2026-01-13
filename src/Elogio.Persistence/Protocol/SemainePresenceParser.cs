@@ -1,7 +1,7 @@
 using System.Text.RegularExpressions;
-using Elogio.Core.Models;
+using Elogio.Persistence.Dto;
 
-namespace Elogio.Core.Protocol;
+namespace Elogio.Persistence.Protocol;
 
 /// <summary>
 /// Parser for SemainePresenceBWT (weekly presence) GWT-RPC responses.
@@ -14,7 +14,7 @@ public partial class SemainePresenceParser
     /// <summary>
     /// Parse a decoded GWT-RPC response containing SemainePresenceBWT data.
     /// </summary>
-    public WeekPresence? Parse(string gwtRpcData)
+    public WeekPresenceDto? Parse(string gwtRpcData)
     {
         var message = _tokenizer.Tokenize(gwtRpcData);
 
@@ -32,7 +32,7 @@ public partial class SemainePresenceParser
         return ParseSemainePresence(message, gwtRpcData);
     }
 
-    private WeekPresence? ParseSemainePresence(GwtRpcMessage message, string rawData)
+    private WeekPresenceDto? ParseSemainePresence(GwtRpcMessage message, string rawData)
     {
         // Find employee name in string table
         var employeeName = FindEmployeeName(message);
@@ -57,7 +57,7 @@ public partial class SemainePresenceParser
         // Calculate week start from first date
         var weekStart = dates.Count > 0 ? dates[0] : DateOnly.FromDateTime(DateTime.Today);
 
-        return new WeekPresence
+        return new WeekPresenceDto
         {
             EmployeeName = employeeName ?? "Unknown",
             WeekStartDate = weekStart,
@@ -197,12 +197,12 @@ public partial class SemainePresenceParser
         return dailyTimes;
     }
 
-    private static List<DayPresence> BuildDayEntries(
+    private static List<DayPresenceDto> BuildDayEntries(
         List<DateOnly> dates,
         List<(int WorkedSeconds, int ExpectedSeconds)> dailyTimes,
-        Dictionary<DateOnly, List<TimeEntry>> badgeEntriesByDate)
+        Dictionary<DateOnly, List<TimeEntryDto>> badgeEntriesByDate)
     {
-        var days = new List<DayPresence>();
+        var days = new List<DayPresenceDto>();
 
         for (int i = 0; i < 7; i++)
         {
@@ -214,7 +214,7 @@ public partial class SemainePresenceParser
                 ? badgeEntries
                 : [];
 
-            days.Add(new DayPresence
+            days.Add(new DayPresenceDto
             {
                 Date = date,
                 DayOfWeek = date.DayOfWeek.ToString(),
@@ -232,12 +232,12 @@ public partial class SemainePresenceParser
     /// Badge times are stored as BHeure72 values - the value represents minutes from midnight.
     /// Pattern in data: after a date (YYYYMMDD), look for time references followed by minute values.
     /// </summary>
-    private static Dictionary<DateOnly, List<TimeEntry>> ExtractBadgeEntries(
+    private static Dictionary<DateOnly, List<TimeEntryDto>> ExtractBadgeEntries(
         GwtRpcMessage message,
         string rawData,
         List<DateOnly> dates)
     {
-        var result = new Dictionary<DateOnly, List<TimeEntry>>();
+        var result = new Dictionary<DateOnly, List<TimeEntryDto>>();
 
         // Find the string index for BHeure72 type
         var bHeure72Index = -1;
@@ -317,16 +317,16 @@ public partial class SemainePresenceParser
             }
         }
 
-        // Group by date and create TimeEntry objects
+        // Group by date and create TimeEntryDto objects
         foreach (var dateGroup in allBadgeTimes.GroupBy(bt => bt.Date))
         {
-            var entries = new List<TimeEntry>();
+            var entries = new List<TimeEntryDto>();
             var times = dateGroup.OrderBy(bt => bt.Time).ToList();
 
             // Alternate between BadgeIn and BadgeOut
             for (int i = 0; i < times.Count; i++)
             {
-                entries.Add(new TimeEntry
+                entries.Add(new TimeEntryDto
                 {
                     Time = times[i].Time,
                     Type = i % 2 == 0 ? TimeEntryType.BadgeIn : TimeEntryType.BadgeOut

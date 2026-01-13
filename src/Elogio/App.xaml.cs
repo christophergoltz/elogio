@@ -1,13 +1,13 @@
 using System.IO;
 using System.Windows;
-using Elogio.Desktop.Services;
-using Elogio.Desktop.ViewModels;
-using Elogio.Desktop.Views.Pages;
+using Elogio.Services;
+using Elogio.ViewModels;
+using Elogio.Views.Pages;
 using Microsoft.Extensions.DependencyInjection;
 using Serilog;
 using Velopack;
 
-namespace Elogio.Desktop;
+namespace Elogio;
 
 public partial class App : Application
 {

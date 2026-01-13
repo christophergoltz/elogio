@@ -1,8 +1,8 @@
 using System.Windows.Controls;
-using Elogio.Core.Api;
-using Elogio.Desktop.ViewModels;
+using Elogio.Persistence.Api;
+using Elogio.ViewModels;
 
-namespace Elogio.Desktop.Views;
+namespace Elogio.Views;
 
 public partial class TimeSheetView : UserControl
 {

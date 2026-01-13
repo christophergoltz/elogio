@@ -1,8 +1,8 @@
-using Elogio.Core.Protocol;
+using Elogio.Persistence.Protocol;
 using Shouldly;
 using Xunit;
 
-namespace Elogio.Tests.Protocol;
+namespace Elogio.Persistence.Tests.Protocol;
 
 /// <summary>
 /// Tests for GWT-RPC request builder.

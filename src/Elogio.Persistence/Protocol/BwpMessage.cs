@@ -1,4 +1,4 @@
-namespace Elogio.Core.Protocol;
+namespace Elogio.Persistence.Protocol;
 
 /// <summary>
 /// Represents a decoded BWP (Bodet Web Protocol) message.

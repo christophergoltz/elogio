@@ -1,8 +1,8 @@
 using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
-using Elogio.Desktop.Services;
+using Elogio.Services;
 
-namespace Elogio.Desktop.ViewModels;
+namespace Elogio.ViewModels;
 
 public partial class LoginViewModel : ObservableObject
 {

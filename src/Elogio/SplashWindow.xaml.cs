@@ -1,6 +1,6 @@
 using Wpf.Ui.Controls;
 
-namespace Elogio.Desktop;
+namespace Elogio;
 
 /// <summary>
 /// Splash window shown during auto-login.

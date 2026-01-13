@@ -1,6 +1,6 @@
 using CommunityToolkit.Mvvm.ComponentModel;
 
-namespace Elogio.Desktop.ViewModels;
+namespace Elogio.ViewModels;
 
 public partial class MainViewModel : ObservableObject
 {

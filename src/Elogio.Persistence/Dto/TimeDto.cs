@@ -1,13 +1,13 @@
-namespace Elogio.Core.Models;
+namespace Elogio.Persistence.Dto;
 
 /// <summary>
 /// Represents a week of presence/time tracking data.
 /// </summary>
-public record WeekPresence
+public record WeekPresenceDto
 {
     public required string EmployeeName { get; init; }
     public required DateOnly WeekStartDate { get; init; }
-    public required List<DayPresence> Days { get; init; }
+    public required List<DayPresenceDto> Days { get; init; }
     public required TimeSpan TotalWorked { get; init; }
     public required TimeSpan TotalExpected { get; init; }
     public TimeSpan Balance => TotalWorked - TotalExpected;
@@ -16,11 +16,11 @@ public record WeekPresence
 /// <summary>
 /// Represents a single day of presence data.
 /// </summary>
-public record DayPresence
+public record DayPresenceDto
 {
     public required DateOnly Date { get; init; }
     public required string DayOfWeek { get; init; }
-    public required List<TimeEntry> Entries { get; init; }
+    public required List<TimeEntryDto> Entries { get; init; }
     public required TimeSpan WorkedTime { get; init; }
     public required TimeSpan ExpectedTime { get; init; }
     public string? ScheduleInfo { get; init; }
@@ -30,7 +30,7 @@ public record DayPresence
 /// <summary>
 /// Represents a single time entry (badge in/out).
 /// </summary>
-public record TimeEntry
+public record TimeEntryDto
 {
     public required TimeOnly Time { get; init; }
     public required TimeEntryType Type { get; init; }

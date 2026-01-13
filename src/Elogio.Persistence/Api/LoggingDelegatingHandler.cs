@@ -1,7 +1,7 @@
 using System.Net;
 using System.Text;
 
-namespace Elogio.Core.Api;
+namespace Elogio.Persistence.Api;
 
 /// <summary>
 /// DelegatingHandler that logs all HTTP requests and responses to a file.

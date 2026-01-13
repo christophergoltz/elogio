@@ -1,6 +1,6 @@
-using Elogio.Core.Models;
+using Elogio.Persistence.Dto;
 
-namespace Elogio.Desktop.Services;
+namespace Elogio.Services;
 
 /// <summary>
 /// Interface for Kelio API operations.
@@ -31,7 +31,7 @@ public interface IKelioService
     /// <summary>
     /// Get weekly presence data for a specific date.
     /// </summary>
-    Task<WeekPresence?> GetWeekPresenceAsync(DateOnly date);
+    Task<WeekPresenceDto?> GetWeekPresenceAsync(DateOnly date);
 
     /// <summary>
     /// Get monthly presence data (aggregates multiple weeks).
@@ -62,7 +62,7 @@ public class MonthData
 {
     public int Year { get; init; }
     public int Month { get; init; }
-    public List<DayPresence> Days { get; init; } = [];
+    public List<DayPresenceDto> Days { get; init; } = [];
     public TimeSpan TotalWorked => TimeSpan.FromTicks(Days.Sum(d => d.WorkedTime.Ticks));
     public TimeSpan TotalExpected => TimeSpan.FromTicks(Days.Sum(d => d.ExpectedTime.Ticks));
     public TimeSpan Balance => TotalWorked - TotalExpected;

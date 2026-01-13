@@ -1,6 +1,6 @@
 using System.Windows.Controls;
 
-namespace Elogio.Desktop.Services;
+namespace Elogio.Services;
 
 /// <summary>
 /// Interface for page navigation service.

@@ -1,10 +1,10 @@
 using System.Collections.ObjectModel;
 using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
-using Elogio.Core.Api;
-using Elogio.Core.Models;
+using Elogio.Persistence.Api;
+using Elogio.Persistence.Dto;
 
-namespace Elogio.Desktop.ViewModels;
+namespace Elogio.ViewModels;
 
 public partial class TimeSheetViewModel : ObservableObject
 {
@@ -35,7 +35,7 @@ public partial class TimeSheetViewModel : ObservableObject
     private string _balance = "";
 
     [ObservableProperty]
-    private ObservableCollection<DayPresenceViewModel> _days = [];
+    private ObservableCollection<DayPresenceDtoViewModel> _days = [];
 
     public TimeSheetViewModel(KelioClient client)
     {
@@ -65,7 +65,7 @@ public partial class TimeSheetViewModel : ObservableObject
                 Days.Clear();
                 foreach (var day in weekPresence.Days)
                 {
-                    Days.Add(new DayPresenceViewModel(day));
+                    Days.Add(new DayPresenceDtoViewModel(day));
                 }
             }
             else
@@ -108,9 +108,9 @@ public partial class TimeSheetViewModel : ObservableObject
 /// <summary>
 /// ViewModel for a single day's presence data.
 /// </summary>
-public partial class DayPresenceViewModel : ObservableObject
+public partial class DayPresenceDtoViewModel : ObservableObject
 {
-    public DayPresenceViewModel(DayPresence day)
+    public DayPresenceDtoViewModel(DayPresenceDto day)
     {
         Date = day.Date.ToString("dd.MM");
         DayOfWeek = day.DayOfWeek;

@@ -1,4 +1,4 @@
-namespace Elogio.Core.Protocol;
+namespace Elogio.Persistence.Protocol;
 
 /// <summary>
 /// BWP (Bodet Web Protocol) Encoder/Decoder.

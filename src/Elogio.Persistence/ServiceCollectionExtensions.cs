@@ -1,9 +1,9 @@
 using System.Net;
-using Elogio.Core.Api;
+using Elogio.Persistence.Api;
 using Microsoft.Extensions.DependencyInjection;
 using Refit;
 
-namespace Elogio.Core;
+namespace Elogio.Persistence;
 
 public static class ServiceCollectionExtensions
 {

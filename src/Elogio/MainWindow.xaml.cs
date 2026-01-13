@@ -1,12 +1,12 @@
 using System.Windows;
-using Elogio.Desktop.Services;
-using Elogio.Desktop.ViewModels;
-using Elogio.Desktop.Views.Pages;
+using Elogio.Services;
+using Elogio.ViewModels;
+using Elogio.Views.Pages;
 using Microsoft.Extensions.DependencyInjection;
 using Wpf.Ui.Appearance;
 using Wpf.Ui.Controls;
 
-namespace Elogio.Desktop;
+namespace Elogio;
 
 /// <summary>
 /// Main application window with navigation.
@@ -154,7 +154,7 @@ public partial class MainWindow : FluentWindow
     /// <summary>
     /// Update the time entries display with badge in/out pairs.
     /// </summary>
-    private void UpdateTimeEntriesDisplay(List<Elogio.Core.Models.TimeEntry> entries)
+    private void UpdateTimeEntriesDisplay(List<Elogio.Persistence.Dto.TimeEntryDto> entries)
     {
         TimeEntriesPanel.Children.Clear();
 

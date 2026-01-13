@@ -3,7 +3,7 @@ using System.Text;
 using System.Text.Json;
 using System.Text.Json.Serialization;
 
-namespace Elogio.Core.Api;
+namespace Elogio.Persistence.Api;
 
 /// <summary>
 /// HTTP client that uses curl_cffi for TLS fingerprint impersonation.

@@ -1,8 +1,8 @@
 using System.Windows;
 using System.Windows.Controls;
-using Elogio.Desktop.ViewModels;
+using Elogio.ViewModels;
 
-namespace Elogio.Desktop.Views.Pages;
+namespace Elogio.Views.Pages;
 
 /// <summary>
 /// Monthly calendar page showing time tracking data.

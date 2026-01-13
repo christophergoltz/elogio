@@ -1,13 +1,13 @@
 using System.Net;
 using System.Reflection;
 using System.Text;
-using Elogio.Core.Api;
-using Elogio.Core.Protocol;
+using Elogio.Persistence.Api;
+using Elogio.Persistence.Protocol;
 using Microsoft.Extensions.Configuration;
 using Xunit;
 using Xunit.Abstractions;
 
-namespace Elogio.Tests.Integration;
+namespace Elogio.Persistence.Tests.Integration;
 
 /// <summary>
 /// Integration tests for KelioClient.

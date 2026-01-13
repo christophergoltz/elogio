@@ -1,9 +1,9 @@
-using Elogio.Core.Models;
-using Elogio.Core.Protocol;
+using Elogio.Persistence.Dto;
+using Elogio.Persistence.Protocol;
 using Shouldly;
 using Xunit;
 
-namespace Elogio.Tests.Protocol;
+namespace Elogio.Persistence.Tests.Protocol;
 
 /// <summary>
 /// Tests for SemainePresenceBWT (weekly presence) GWT-RPC parser.

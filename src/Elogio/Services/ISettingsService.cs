@@ -1,4 +1,4 @@
-namespace Elogio.Desktop.Services;
+namespace Elogio.Services;
 
 /// <summary>
 /// Interface for user settings persistence.

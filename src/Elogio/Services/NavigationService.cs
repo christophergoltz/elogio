@@ -1,6 +1,6 @@
 using System.Windows.Controls;
 
-namespace Elogio.Desktop.Services;
+namespace Elogio.Services;
 
 /// <summary>
 /// Navigation service implementation for WPF-UI.

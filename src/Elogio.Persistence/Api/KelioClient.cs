@@ -1,11 +1,11 @@
 using System.Net;
 using System.Text;
 using System.Text.RegularExpressions;
-using Elogio.Core.Models;
-using Elogio.Core.Protocol;
+using Elogio.Persistence.Dto;
+using Elogio.Persistence.Protocol;
 using Refit;
 
-namespace Elogio.Core.Api;
+namespace Elogio.Persistence.Api;
 
 /// <summary>
 /// High-level client for Kelio API interactions.
@@ -593,7 +593,7 @@ public partial class KelioClient : IDisposable
     /// Uses the dynamic employee ID extracted from GlobalBWTService connect.
     /// </summary>
     /// <param name="date">Any date within the desired week</param>
-    public async Task<WeekPresence?> GetWeekPresenceAsync(DateOnly date)
+    public async Task<WeekPresenceDto?> GetWeekPresenceAsync(DateOnly date)
     {
         if (!_isAuthenticated || string.IsNullOrEmpty(_sessionId))
         {
@@ -643,7 +643,7 @@ public partial class KelioClient : IDisposable
     /// <summary>
     /// Get week presence data for the current week.
     /// </summary>
-    public Task<WeekPresence?> GetCurrentWeekPresenceAsync()
+    public Task<WeekPresenceDto?> GetCurrentWeekPresenceAsync()
     {
         return GetWeekPresenceAsync(DateOnly.FromDateTime(DateTime.Today));
     }

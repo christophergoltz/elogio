@@ -1,8 +1,8 @@
 using System.Windows;
 using System.Windows.Controls;
-using Elogio.Desktop.ViewModels;
+using Elogio.ViewModels;
 
-namespace Elogio.Desktop.Views;
+namespace Elogio.Views;
 
 /// <summary>
 /// Legacy LoginView - kept for backwards compatibility.

@@ -1,8 +1,8 @@
-using Elogio.Core.Api;
-using Elogio.Core.Models;
+using Elogio.Persistence.Api;
+using Elogio.Persistence.Dto;
 using Serilog;
 
-namespace Elogio.Desktop.Services;
+namespace Elogio.Services;
 
 /// <summary>
 /// Kelio API service implementation wrapping KelioClient.
@@ -37,7 +37,7 @@ public class KelioService : IKelioService, IDisposable
         return success;
     }
 
-    public async Task<WeekPresence?> GetWeekPresenceAsync(DateOnly date)
+    public async Task<WeekPresenceDto?> GetWeekPresenceAsync(DateOnly date)
     {
         if (_client == null || !IsAuthenticated)
             return null;
@@ -121,7 +121,7 @@ public class KelioService : IKelioService, IDisposable
         Log.Information("FetchMonthDataInternalAsync: Fetching {WeekCount} weeks for {Year}-{Month}: {WeekStarts}",
             weeks.Count, year, month, string.Join(", ", weeks.Select(w => w.ToString("yyyy-MM-dd"))));
 
-        var allDays = new List<DayPresence>();
+        var allDays = new List<DayPresenceDto>();
         var seenDates = new HashSet<DateOnly>();
         var successfulWeeks = 0;
         var failedWeeks = 0;
@@ -150,7 +150,7 @@ public class KelioService : IKelioService, IDisposable
             catch (Exception ex)
             {
                 Log.Error(ex, "Failed to fetch week {WeekStart}", weekStart);
-                return (weekStart, (WeekPresence?)null);
+                return (weekStart, (WeekPresenceDto?)null);
             }
             finally
             {

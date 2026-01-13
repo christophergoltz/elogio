@@ -1,6 +1,6 @@
 using Refit;
 
-namespace Elogio.Core.Api;
+namespace Elogio.Persistence.Api;
 
 /// <summary>
 /// Refit interface for Kelio BWP API calls.

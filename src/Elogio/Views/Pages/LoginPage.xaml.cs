@@ -1,8 +1,8 @@
 using System.Windows.Controls;
-using Elogio.Desktop.Services;
-using Elogio.Desktop.ViewModels;
+using Elogio.Services;
+using Elogio.ViewModels;
 
-namespace Elogio.Desktop.Views.Pages;
+namespace Elogio.Views.Pages;
 
 /// <summary>
 /// Login page for authentication.

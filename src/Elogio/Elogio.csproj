@@ -2,8 +2,6 @@
     <PropertyGroup>
         <OutputType>WinExe</OutputType>
         <UseWPF>true</UseWPF>
-        <RootNamespace>Elogio.Desktop</RootNamespace>
-        <AssemblyName>Elogio.Desktop</AssemblyName>
     </PropertyGroup>
 
     <ItemGroup>
@@ -16,6 +14,6 @@
     </ItemGroup>
 
     <ItemGroup>
-        <ProjectReference Include="..\Elogio.Core\Elogio.Core.csproj"/>
+        <ProjectReference Include="..\Elogio.Persistence\Elogio.Persistence.csproj"/>
     </ItemGroup>
 </Project>

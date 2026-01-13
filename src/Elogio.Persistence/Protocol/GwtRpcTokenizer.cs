@@ -1,6 +1,6 @@
 using System.Text;
 
-namespace Elogio.Core.Protocol;
+namespace Elogio.Persistence.Protocol;
 
 /// <summary>
 /// Tokenizer for GWT-RPC serialized data.

@@ -1,6 +1,6 @@
 using System.Text;
 
-namespace Elogio.Core.Protocol;
+namespace Elogio.Persistence.Protocol;
 
 /// <summary>
 /// Builder for GWT-RPC request messages.

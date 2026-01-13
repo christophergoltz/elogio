@@ -1,8 +1,8 @@
 using System.Net.Http.Headers;
 using System.Text;
-using Elogio.Core.Protocol;
+using Elogio.Persistence.Protocol;
 
-namespace Elogio.Core.Api;
+namespace Elogio.Persistence.Api;
 
 /// <summary>
 /// HTTP handler that automatically encodes requests and decodes responses using BWP protocol.

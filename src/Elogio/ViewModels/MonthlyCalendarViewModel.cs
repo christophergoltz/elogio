@@ -2,11 +2,11 @@ using System.Collections.ObjectModel;
 using System.Globalization;
 using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
-using Elogio.Core.Models;
-using Elogio.Desktop.Services;
+using Elogio.Persistence.Dto;
+using Elogio.Services;
 using Serilog;
 
-namespace Elogio.Desktop.ViewModels;
+namespace Elogio.ViewModels;
 
 public partial class MonthlyCalendarViewModel : ObservableObject
 {
