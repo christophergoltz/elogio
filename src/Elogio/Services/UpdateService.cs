@@ -10,7 +10,7 @@ namespace Elogio.Services;
 /// </summary>
 public sealed class UpdateService : IUpdateService
 {
-    private const string GitHubRepoUrl = "https://github.com/Chr1st0pher-Goltz/elogio";
+    private const string GitHubRepoUrl = "https://github.com/christophergoltz/elogio";
 
     private readonly UpdateManager _updateManager;
     private Velopack.UpdateInfo? _velopackUpdateInfo;
