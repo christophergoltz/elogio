@@ -84,4 +84,5 @@ jobs:
             --repoUrl https://github.com/${{ github.repository }} `
             --token ${{ secrets.GITHUB_TOKEN }} `
             --tag ${{ needs.release-please.outputs.tag_name }} `
-            --outputDir ./velopack-output
+            --outputDir ./velopack-output `
+            --merge
