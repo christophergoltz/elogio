@@ -4,6 +4,7 @@ using Elogio.Services;
 using Elogio.ViewModels;
 using Elogio.Views.Pages;
 using Microsoft.Extensions.DependencyInjection;
+using Serilog;
 using Wpf.Ui.Appearance;
 using Wpf.Ui.Controls;
 
@@ -16,6 +17,7 @@ public partial class MainWindow
 {
     private readonly INavigationService _navigationService;
     private readonly IKelioService _kelioService;
+    private readonly IUpdateService _updateService;
     private readonly Snackbar _snackbar;
 
     // Track current punch state: null = unknown, true = clocked in, false = clocked out
@@ -24,12 +26,14 @@ public partial class MainWindow
     public MainWindow(
         MainViewModel viewModel,
         INavigationService navigationService,
-        IKelioService kelioService)
+        IKelioService kelioService,
+        IUpdateService updateService)
     {
         InitializeComponent();
 
         _navigationService = navigationService;
         _kelioService = kelioService;
+        _updateService = updateService;
 
         DataContext = viewModel;
 
@@ -41,6 +45,9 @@ public partial class MainWindow
 
         // Initialize Snackbar
         _snackbar = new Snackbar(SnackbarPresenter);
+
+        // Subscribe to update available event
+        _updateService.UpdateAvailable += OnUpdateAvailable;
     }
     
     /// <summary>
@@ -99,6 +106,65 @@ public partial class MainWindow
 
         // Load today's balance and determine initial punch state
         _ = UpdateTodayBalanceAsync();
+
+        // Check for updates in background (non-blocking)
+        _ = CheckForUpdatesAsync();
+    }
+
+    /// <summary>
+    /// Check for application updates in background.
+    /// </summary>
+    private async Task CheckForUpdatesAsync()
+    {
+        try
+        {
+            await _updateService.CheckForUpdatesAsync();
+        }
+        catch (Exception ex)
+        {
+            Log.Warning(ex, "Update check failed");
+        }
+    }
+
+    /// <summary>
+    /// Handle update available event from UpdateService.
+    /// </summary>
+    private void OnUpdateAvailable(object? sender, UpdateInfo updateInfo)
+    {
+        Dispatcher.Invoke(() =>
+        {
+            UpdateVersionText.Text = $"Version {updateInfo.Version} is available";
+            UpdateBanner.Visibility = Visibility.Visible;
+        });
+    }
+
+    /// <summary>
+    /// Install the update and restart the application.
+    /// </summary>
+    private async void InstallUpdateButton_Click(object sender, RoutedEventArgs e)
+    {
+        try
+        {
+            InstallUpdateButton.IsEnabled = false;
+            UpdateDetailsText.Text = "Downloading update...";
+
+            await _updateService.ApplyUpdateAndRestartAsync();
+        }
+        catch (Exception ex)
+        {
+            Log.Error(ex, "Failed to install update");
+            ShowErrorToast("Update Failed", $"Could not install update: {ex.Message}");
+            InstallUpdateButton.IsEnabled = true;
+            UpdateDetailsText.Text = "Click 'Install Now' to try again";
+        }
+    }
+
+    /// <summary>
+    /// Dismiss the update banner.
+    /// </summary>
+    private void DismissUpdateButton_Click(object sender, RoutedEventArgs e)
+    {
+        UpdateBanner.Visibility = Visibility.Collapsed;
     }
 
     /// <summary>
