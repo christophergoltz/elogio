@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.1.2](https://github.com/christophergoltz/elogio/compare/v0.1.1...v0.1.2) (2026-01-14)
+
+
+### Features
+
+* add Velopack auto-updates with GitHub Releases ([#6](https://github.com/christophergoltz/elogio/issues/6)) ([3816f7d](https://github.com/christophergoltz/elogio/commit/3816f7d60351e009663cbefc1c440f269e090e23))
+
 ## [0.1.1](https://github.com/christophergoltz/elogio/compare/v0.1.0...v0.1.1) (2026-01-14)
 
 
