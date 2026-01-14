@@ -97,6 +97,30 @@ public class IsNegativeConverter : IValueConverter
 }
 
 /// <summary>
+/// Returns true if the value is positive (greater than zero, works with TimeSpan and numeric types).
+/// </summary>
+public class IsPositiveConverter : IValueConverter
+{
+    public object Convert(object? value, Type targetType, object? parameter, CultureInfo culture)
+    {
+        return value switch
+        {
+            TimeSpan ts => ts > TimeSpan.Zero,
+            double d => d > 0,
+            int i => i > 0,
+            long l => l > 0,
+            decimal m => m > 0,
+            _ => false
+        };
+    }
+
+    public object ConvertBack(object? value, Type targetType, object? parameter, CultureInfo culture)
+    {
+        throw new NotImplementedException();
+    }
+}
+
+/// <summary>
 /// Returns Visible if the DayCellState is MissingEntry, otherwise Collapsed.
 /// </summary>
 public class MissingEntryToVisibilityConverter : IValueConverter
@@ -105,6 +129,37 @@ public class MissingEntryToVisibilityConverter : IValueConverter
     {
         // Need to reference the enum - use string comparison for simplicity
         return value?.ToString() == "MissingEntry" ? Visibility.Visible : Visibility.Collapsed;
+    }
+
+    public object ConvertBack(object? value, Type targetType, object? parameter, CultureInfo culture)
+    {
+        throw new NotImplementedException();
+    }
+}
+
+/// <summary>
+/// Converts a hex color string (e.g., "#FF0000") to a SolidColorBrush with reduced opacity.
+/// Returns Transparent if the value is null or empty.
+/// </summary>
+public class HexColorToBrushConverter : IValueConverter
+{
+    public object Convert(object? value, Type targetType, object? parameter, CultureInfo culture)
+    {
+        if (value is string hexColor && !string.IsNullOrEmpty(hexColor))
+        {
+            try
+            {
+                var color = (System.Windows.Media.Color)System.Windows.Media.ColorConverter.ConvertFromString(hexColor);
+                // Use 50% opacity for a subtle but visible border
+                return new System.Windows.Media.SolidColorBrush(
+                    System.Windows.Media.Color.FromArgb(128, color.R, color.G, color.B));
+            }
+            catch
+            {
+                return System.Windows.Media.Brushes.Transparent;
+            }
+        }
+        return System.Windows.Media.Brushes.Transparent;
     }
 
     public object ConvertBack(object? value, Type targetType, object? parameter, CultureInfo culture)

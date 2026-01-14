@@ -239,6 +239,52 @@ public class GwtRpcRequestBuilder
     }
 
     /// <summary>
+    /// Build a GWT-RPC request for the GlobalBWTService connect method for the calendar app.
+    /// Uses Short=16 instead of 21 (portal uses 21, calendar uses 16 based on HAR capture).
+    /// </summary>
+    /// <param name="sessionId">The session ID from authentication</param>
+    /// <param name="timestamp">Unix timestamp</param>
+    public string BuildCalendarConnectRequest(string sessionId, long timestamp)
+    {
+        const string service = "com.bodet.bwt.global.serveur.service.GlobalBWTService";
+        const string method = "connect";
+        const string javaLangShort = "java.lang.Short";
+        const string javaLangLong = "java.lang.Long";
+
+        var strings = new List<string>
+        {
+            BwpRequestType,     // 0
+            JavaUtilList,       // 1
+            javaLangShort,      // 2
+            javaLangLong,       // 3
+            NullString,         // 4
+            JavaLangString,     // 5
+            sessionId,          // 6
+            method,             // 7
+            service             // 8
+        };
+
+        var sb = new StringBuilder();
+        sb.Append(strings.Count);
+
+        foreach (var str in strings)
+        {
+            sb.Append(",\"");
+            sb.Append(EscapeString(str));
+            sb.Append('"');
+        }
+
+        // Data tokens for calendar GlobalBWTService connect
+        // CRITICAL: Calendar app uses Short=16 (vs 21 for portal), Long=411, Long=-timestamp
+        // Format: 0,1,2,2,16,3,411,-timestamp,4,5,6,5,7,5,8
+        sb.Append(",0,1,2,2,16,3,411,");
+        sb.Append(-timestamp);
+        sb.Append(",4,5,6,5,7,5,8");
+
+        return sb.ToString();
+    }
+
+    /// <summary>
     /// Convert a DateOnly to Kelio date format (YYYYMMDD).
     /// </summary>
     public static int ToKelioDate(DateOnly date)
@@ -306,6 +352,224 @@ public class GwtRpcRequestBuilder
         sb.Append(",0,1,3,2,2,3,0,4,");
         sb.Append(employeeId);
         sb.Append(",5,6,5,7,5,8");
+
+        return sb.ToString();
+    }
+
+    /// <summary>
+    /// Build a GWT-RPC request for the GlobalBWTService getPresentationModel method
+    /// with the GlobalPresentationModel class (called before CalendrierAbsencePresentationModel).
+    /// </summary>
+    /// <param name="sessionId">The session ID from authentication</param>
+    /// <param name="contextId">Context ID (employee ID from session)</param>
+    public string BuildGetGlobalPresentationModelRequest(string sessionId, int contextId)
+    {
+        const string service = "com.bodet.bwt.global.serveur.service.GlobalBWTService";
+        const string method = "getPresentationModel";
+        const string presentationModelClass = "com.bodet.bwt.appli.mouse.pm.global.GlobalPresentationModel";
+        const string javaLangShort = "java.lang.Short";
+
+        var strings = new List<string>
+        {
+            BwpRequestType,          // 0
+            JavaUtilList,            // 1
+            javaLangShort,           // 2
+            JavaLangString,          // 3
+            presentationModelClass,  // 4
+            JavaLangInteger,         // 5
+            sessionId,               // 6
+            method,                  // 7
+            service                  // 8
+        };
+
+        var sb = new StringBuilder();
+        sb.Append(strings.Count);
+
+        foreach (var str in strings)
+        {
+            sb.Append(",\"");
+            sb.Append(EscapeString(str));
+            sb.Append('"');
+        }
+
+        // Data tokens: 0,1,2,2,16,3,4,5,{contextId},3,6,3,7,3,8
+        sb.Append(",0,1,2,2,16,3,4,5,");
+        sb.Append(contextId);
+        sb.Append(",3,6,3,7,3,8");
+
+        return sb.ToString();
+    }
+
+    /// <summary>
+    /// Build a GWT-RPC request for the LiensBWTService getParametreIntranet method.
+    /// This is called during calendar initialization (after GlobalPresentationModel, before translations).
+    /// </summary>
+    /// <param name="sessionId">The session ID from authentication</param>
+    /// <param name="contextId">Context ID (employee ID from session)</param>
+    public string BuildGetParametreIntranetRequest(string sessionId, int contextId)
+    {
+        const string service = "com.bodet.bwt.commun.serveur.service.LiensBWTService";
+        const string method = "getParametreIntranet";
+
+        // HAR: 7,"BWPRequest","List","Integer","String","{sessionId}","getParametreIntranet","{service}"
+        // Data: 0,1,0,2,{contextId},3,4,3,5,3,6
+        var strings = new List<string>
+        {
+            BwpRequestType,     // 0
+            JavaUtilList,       // 1
+            JavaLangInteger,    // 2
+            JavaLangString,     // 3
+            sessionId,          // 4
+            method,             // 5
+            service             // 6
+        };
+
+        var sb = new StringBuilder();
+        sb.Append(strings.Count);
+
+        foreach (var str in strings)
+        {
+            sb.Append(",\"");
+            sb.Append(EscapeString(str));
+            sb.Append('"');
+        }
+
+        // Data tokens: 0,1,0,2,{contextId},3,4,3,5,3,6
+        sb.Append(",0,1,0,2,");
+        sb.Append(contextId);
+        sb.Append(",3,4,3,5,3,6");
+
+        return sb.ToString();
+    }
+
+    /// <summary>
+    /// Build a GWT-RPC request for the GlobalBWTService getPresentationModel method
+    /// with the CalendrierAbsencePresentationModel class.
+    /// This MUST be called before getAbsencesEtJoursFeries to initialize the calendar module.
+    /// </summary>
+    /// <param name="sessionId">The session ID from authentication</param>
+    /// <param name="contextId">Context ID (employee ID from session)</param>
+    /// <remarks>
+    /// Service: com.bodet.bwt.global.serveur.service.GlobalBWTService
+    /// Method: getPresentationModel
+    ///
+    /// Request format (from HAR capture):
+    /// 9,"BWPRequest","List","Short","String","CalendrierAbsencePresentationModel","Integer",
+    /// "{sessionId}","getPresentationModel","{service}",
+    /// 0,1,2,2,16,3,4,5,{contextId},3,6,3,7,3,8
+    /// </remarks>
+    public string BuildGetPresentationModelRequest(string sessionId, int contextId)
+    {
+        const string service = "com.bodet.bwt.global.serveur.service.GlobalBWTService";
+        const string method = "getPresentationModel";
+        const string presentationModelClass = "com.bodet.bwt.exploit.gtp.client.commun.intranet_calendrier_absence.CalendrierAbsencePresentationModel";
+        const string javaLangShort = "java.lang.Short";
+
+        // String table based on captured HAR data
+        var strings = new List<string>
+        {
+            BwpRequestType,          // 0
+            JavaUtilList,            // 1
+            javaLangShort,           // 2
+            JavaLangString,          // 3
+            presentationModelClass,  // 4
+            JavaLangInteger,         // 5
+            sessionId,               // 6
+            method,                  // 7
+            service                  // 8
+        };
+
+        var sb = new StringBuilder();
+        sb.Append(strings.Count);
+
+        foreach (var str in strings)
+        {
+            sb.Append(",\"");
+            sb.Append(EscapeString(str));
+            sb.Append('"');
+        }
+
+        // Data tokens from HAR capture:
+        // 0,1 = BWPRequest, List
+        // 2,2,16 = Short type, Short value 16 (calendar module)
+        // 3,4 = String type, presentation model class name
+        // 5,{contextId} = Integer type, context ID value
+        // 3,6,3,7,3,8 = String refs for sessionId, method, service
+        sb.Append(",0,1,2,2,16,3,4,5,");
+        sb.Append(contextId);
+        sb.Append(",3,6,3,7,3,8");
+
+        return sb.ToString();
+    }
+
+    /// <summary>
+    /// Build a GWT-RPC request for the getAbsencesEtJoursFeries method.
+    /// Retrieves absence calendar data (vacation, sick leave, holidays, etc.) for a date range.
+    /// </summary>
+    /// <param name="sessionId">The session ID from authentication</param>
+    /// <param name="employeeId">The employee ID</param>
+    /// <param name="startDate">Start date in YYYYMMDD format</param>
+    /// <param name="endDate">End date in YYYYMMDD format</param>
+    /// <param name="requestId">Request counter (used for internal tracking)</param>
+    /// <remarks>
+    /// Service: com.bodet.bwt.gtp.serveur.service.intranet.calendrier_absence.CalendrierAbsenceSalarieBWTService
+    /// Method: getAbsencesEtJoursFeries
+    ///
+    /// Request format (from HAR capture):
+    /// 11,"BWPRequest","List","Integer","BDate","CalendrierAbsenceConfigurationBWT","Boolean","NULL","String",
+    /// "{sessionId}","getAbsencesEtJoursFeries","{service}",
+    /// 0,1,5,2,{employeeId},3,{startDate},3,{endDate},4,5,1,5,0,5,1,5,1,5,1,5,1,6,6,5,1,6,6,2,3,2,{requestId},7,8,7,9,7,10
+    /// </remarks>
+    public string BuildGetAbsencesRequest(string sessionId, int employeeId, int startDate, int endDate, int requestId)
+    {
+        const string service = "com.bodet.bwt.gtp.serveur.service.intranet.calendrier_absence.CalendrierAbsenceSalarieBWTService";
+        const string method = "getAbsencesEtJoursFeries";
+        const string configType = "com.bodet.bwt.gtp.serveur.domain.commun.intranet_calendrier_absence.CalendrierAbsenceConfigurationBWT";
+        const string javaLangBoolean = "java.lang.Boolean";
+
+        // String table based on captured HAR data
+        var strings = new List<string>
+        {
+            BwpRequestType,     // 0
+            JavaUtilList,       // 1
+            JavaLangInteger,    // 2
+            BDateType,          // 3
+            configType,         // 4
+            javaLangBoolean,    // 5
+            NullString,         // 6
+            JavaLangString,     // 7
+            sessionId,          // 8
+            method,             // 9
+            service             // 10
+        };
+
+        var sb = new StringBuilder();
+        sb.Append(strings.Count);
+
+        foreach (var str in strings)
+        {
+            sb.Append(",\"");
+            sb.Append(EscapeString(str));
+            sb.Append('"');
+        }
+
+        // Data tokens from HAR capture:
+        // 0,1,5 = BWPRequest, List, with 5 parameters
+        // 2,{employeeId} = Integer with employee ID
+        // 3,{startDate},3,{endDate} = BDate start and end
+        // 4,5,1,5,0,5,1,5,1,5,1,5,1,6,6,5,1,6,6 = CalendrierAbsenceConfigurationBWT with boolean flags
+        // 2,3 = type refs
+        // 2,{requestId} = Integer request counter
+        // 7,8,7,9,7,10 = String references for sessionId, method, service
+        sb.Append(",0,1,5,2,");
+        sb.Append(employeeId);
+        sb.Append(",3,");
+        sb.Append(startDate);
+        sb.Append(",3,");
+        sb.Append(endDate);
+        sb.Append(",4,5,1,5,0,5,1,5,1,5,1,5,1,6,6,5,1,6,6,2,3,2,");
+        sb.Append(requestId);
+        sb.Append(",7,8,7,9,7,10");
 
         return sb.ToString();
     }

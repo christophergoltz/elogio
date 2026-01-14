@@ -59,6 +59,17 @@ public interface IKelioService
     /// The server determines whether it's a clock-in or clock-out based on current state.
     /// </summary>
     Task<PunchResultDto?> PunchAsync();
+
+    /// <summary>
+    /// Get absence calendar data for a specific month.
+    /// </summary>
+    Task<AbsenceCalendarDto?> GetMonthAbsencesAsync(int year, int month);
+
+    /// <summary>
+    /// Prefetch absence data for adjacent months in background.
+    /// Fire-and-forget operation.
+    /// </summary>
+    void PrefetchAdjacentMonthAbsences(int year, int month);
 }
 
 /// <summary>

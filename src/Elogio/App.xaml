@@ -19,7 +19,9 @@
             <converters:NullToVisibilityConverter x:Key="NullToVisibilityConverter"/>
             <converters:BoolToBackgroundConverter x:Key="BoolToBackgroundConverter"/>
             <converters:IsNegativeConverter x:Key="IsNegativeConverter"/>
+            <converters:IsPositiveConverter x:Key="IsPositiveConverter"/>
             <converters:MissingEntryToVisibilityConverter x:Key="MissingEntryToVisibilityConverter"/>
+            <converters:HexColorToBrushConverter x:Key="HexColorToBrushConverter"/>
         </ResourceDictionary>
     </Application.Resources>
 </Application>

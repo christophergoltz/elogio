@@ -2,6 +2,7 @@ using System.Collections.ObjectModel;
 using System.Globalization;
 using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
+using Elogio.Persistence.Dto;
 using Elogio.Services;
 using Serilog;
 
@@ -56,11 +57,9 @@ public partial class MonthlyCalendarViewModel : ObservableObject
     public string BalanceDisplay => FormatTimeSpanWithSign(Balance);
 
     /// <summary>
-    /// Whether the user can navigate to the next month (disabled for current/future months).
+    /// Whether the user can navigate to the next month (always enabled).
     /// </summary>
-    public bool CanNavigateNext =>
-        SelectedYear < DateTime.Today.Year ||
-        (SelectedYear == DateTime.Today.Year && SelectedMonth < DateTime.Today.Month);
+    public bool CanNavigateNext => true;
 
     public ObservableCollection<DayCellViewModel> DayCells { get; } = [];
     public ObservableCollection<string> DayHeaders { get; } = ["Mo", "Tu", "We", "Th", "Fr", "Sa", "Su"];
@@ -90,26 +89,46 @@ public partial class MonthlyCalendarViewModel : ObservableObject
 
         try
         {
-            var monthData = await _kelioService.GetMonthDataAsync(SelectedYear, SelectedMonth);
-            Log.Information("Got month data with {DayCount} days", monthData.Days.Count);
+            // Load month data and absences in parallel for better performance
+            var monthDataTask = _kelioService.GetMonthDataAsync(SelectedYear, SelectedMonth);
+            var absencesTask = _kelioService.GetMonthAbsencesAsync(SelectedYear, SelectedMonth);
+
+            await Task.WhenAll(monthDataTask, absencesTask);
+
+            var monthData = await monthDataTask;
+            AbsenceCalendarDto? absences = null;
+            try
+            {
+                absences = await absencesTask;
+            }
+            catch (Exception ex)
+            {
+                Log.Warning(ex, "Failed to load absences for {Year}-{Month}, continuing without absence data",
+                    SelectedYear, SelectedMonth);
+            }
+
+            Log.Information("Got month data with {DayCount} days, absences: {HasAbsences}",
+                monthData.Days.Count, absences != null);
 
             // Update totals - include projected expected hours for remaining working days
             TotalWorked = monthData.TotalWorked;
 
             // Calculate projected expected: actual expected + remaining working days × 7 hours
-            var projectedExpected = CalculateProjectedExpected(monthData);
+            // Pass absences to exclude vacation, sick leave, holidays from projection
+            var projectedExpected = CalculateProjectedExpected(monthData, absences);
             TotalExpected = projectedExpected;
             Balance = TotalWorked - TotalExpected;
 
             Log.Information("Totals: Worked={Worked}, Expected={Expected} (projected), Balance={Balance}",
                 TotalWorked, TotalExpected, Balance);
 
-            // Build calendar grid
-            BuildCalendarGrid(monthData);
+            // Build calendar grid with absence data
+            BuildCalendarGrid(monthData, absences);
             Log.Information("Calendar grid built with {CellCount} cells", DayCells.Count);
 
             // Prefetch adjacent months for faster navigation
             _kelioService.PrefetchAdjacentMonths(SelectedYear, SelectedMonth);
+            _kelioService.PrefetchAdjacentMonthAbsences(SelectedYear, SelectedMonth);
         }
         catch (Exception ex)
         {
@@ -174,32 +193,67 @@ public partial class MonthlyCalendarViewModel : ObservableObject
     }
 
     /// <summary>
-    /// Calculate projected expected hours for the month.
-    /// Kelio API returns data up to the end of the current week, so we project
-    /// from next Monday until the end of the month.
+    /// Calculate adjusted expected hours for the month.
+    /// The Kelio API returns expected hours WITHOUT subtracting absences,
+    /// so we need to subtract hours for vacation, sick leave, and holidays.
+    /// Also projects remaining working days for future periods.
     /// </summary>
-    private TimeSpan CalculateProjectedExpected(MonthData monthData)
+    private TimeSpan CalculateProjectedExpected(MonthData monthData, AbsenceCalendarDto? absences)
     {
         var today = DateOnly.FromDateTime(DateTime.Today);
+        var firstDayOfMonth = new DateOnly(SelectedYear, SelectedMonth, 1);
         var daysInMonth = DateTime.DaysInMonth(SelectedYear, SelectedMonth);
         var lastDayOfMonth = new DateOnly(SelectedYear, SelectedMonth, daysInMonth);
 
         // Start with actual expected from API
         var totalExpected = monthData.TotalExpected;
+        var absenceDeduction = TimeSpan.Zero;
 
-        // Calculate next Monday (start of next week)
-        // DayOfWeek: Sunday=0, Monday=1, ..., Saturday=6
-        var daysUntilNextMonday = ((int)DayOfWeek.Monday - (int)today.DayOfWeek + 7) % 7;
-        if (daysUntilNextMonday == 0) daysUntilNextMonday = 7; // If today is Monday, next Monday is in 7 days
-        var nextMonday = today.AddDays(daysUntilNextMonday);
+        // Build absence lookup for the month
+        var absenceLookup = absences?.Days.ToDictionary(d => d.Date, d => d)
+                            ?? new Dictionary<DateOnly, AbsenceDayDto>();
 
-        // Get dates that already have data
+        // Get dates that already have data from API
         var datesWithData = monthData.Days.Select(d => d.Date).ToHashSet();
 
-        // Add 7 hours for each working day from next Monday until end of month
+        // STEP 1: Subtract absence hours from past/current days
+        // The API includes 7h expected for each working day, even if there was an absence
+        foreach (var date in datesWithData)
+        {
+            if (date.DayOfWeek is DayOfWeek.Saturday or DayOfWeek.Sunday)
+                continue;
+
+            if (absenceLookup.TryGetValue(date, out var absenceDay))
+            {
+                // Full-day absences: subtract the full 7 hours
+                if (absenceDay.Type is AbsenceType.Vacation or AbsenceType.SickLeave or AbsenceType.PublicHoliday)
+                {
+                    absenceDeduction += TimeSpan.FromHours(7);
+                    Log.Debug("CalculateProjectedExpected: Subtracting 7h for {Date} due to {Type}", date, absenceDay.Type);
+                }
+                // Half holiday (standalone): subtract 3.5 hours (expect only 3.5h instead of 7h)
+                else if (absenceDay.Type == AbsenceType.HalfHoliday)
+                {
+                    absenceDeduction += TimeSpan.FromHours(3.5);
+                    Log.Debug("CalculateProjectedExpected: Subtracting 3.5h for {Date} (half holiday)", date);
+                }
+                // Combined half holiday (e.g., Vacation + HalfHoliday on Dec 24)
+                // The main absence (Vacation) already deducts 7h, no additional deduction needed
+            }
+        }
+
+        totalExpected -= absenceDeduction;
+
+        // STEP 2: Project future days that don't have API data yet
+        // Calculate next Monday (start of next week)
+        var daysUntilNextMonday = ((int)DayOfWeek.Monday - (int)today.DayOfWeek + 7) % 7;
+        if (daysUntilNextMonday == 0) daysUntilNextMonday = 7;
+        var nextMonday = today.AddDays(daysUntilNextMonday);
+
+        // Add expected hours for each future day from next Monday until end of month
         for (var date = nextMonday; date <= lastDayOfMonth; date = date.AddDays(1))
         {
-            // Skip if we already have data for this day (shouldn't happen, but just in case)
+            // Skip if we already have data for this day
             if (datesWithData.Contains(date))
                 continue;
 
@@ -207,17 +261,36 @@ public partial class MonthlyCalendarViewModel : ObservableObject
             if (date.DayOfWeek is DayOfWeek.Saturday or DayOfWeek.Sunday)
                 continue;
 
-            // Add 7 hours expected for this working day
+            // Check for absences
+            if (absenceLookup.TryGetValue(date, out var absenceDay))
+            {
+                // Full-day absences: no expected hours
+                if (absenceDay.Type is AbsenceType.Vacation or AbsenceType.SickLeave or AbsenceType.PublicHoliday)
+                {
+                    Log.Debug("CalculateProjectedExpected: Skipping future {Date} due to {Type}", date, absenceDay.Type);
+                    continue;
+                }
+
+                // Half holiday: only 3.5 hours expected
+                if (absenceDay.Type == AbsenceType.HalfHoliday || absenceDay.IsHalfHoliday)
+                {
+                    totalExpected += TimeSpan.FromHours(3.5);
+                    Log.Debug("CalculateProjectedExpected: Future {Date} is half holiday, adding 3.5h", date);
+                    continue;
+                }
+            }
+
+            // Regular working day: 7 hours expected
             totalExpected += TimeSpan.FromHours(7);
         }
 
-        Log.Information("CalculateProjectedExpected: API expected={ApiExpected}, NextMonday={NextMonday}, Projected={Projected}",
-            monthData.TotalExpected, nextMonday, totalExpected);
+        Log.Information("CalculateProjectedExpected: API={ApiExpected}, Deduction={Deduction}, Projected={Projected}",
+            monthData.TotalExpected, absenceDeduction, totalExpected);
 
         return totalExpected;
     }
 
-    private void BuildCalendarGrid(MonthData monthData)
+    private void BuildCalendarGrid(MonthData monthData, AbsenceCalendarDto? absences)
     {
         DayCells.Clear();
 
@@ -227,9 +300,14 @@ public partial class MonthlyCalendarViewModel : ObservableObject
         // Calculate offset for first day (Monday = 0, Sunday = 6)
         var firstDayOffset = ((int)firstDayOfMonth.DayOfWeek + 6) % 7;
 
-        // Create lookup for day data
+        // Create lookups for day data and absences
         var dayDataLookup = monthData.Days.ToDictionary(d => d.Date, d => d);
+        var absenceLookup = absences?.Days.ToDictionary(d => d.Date, d => d)
+                            ?? new Dictionary<DateOnly, AbsenceDayDto>();
         var today = DateOnly.FromDateTime(DateTime.Today);
+
+        Log.Information("BuildCalendarGrid: {AbsenceCount} absences in lookup for {Year}-{Month}",
+            absenceLookup.Count, SelectedYear, SelectedMonth);
 
         // Add empty cells for days before the first of the month
         for (var i = 0; i < firstDayOffset; i++)
@@ -255,13 +333,47 @@ public partial class MonthlyCalendarViewModel : ObservableObject
                 IsFuture = isFuture
             };
 
-            // Fill in data if available
+            // Fill in work time data if available
             if (dayDataLookup.TryGetValue(date, out var dayData))
             {
                 cell.WorkedTime = dayData.WorkedTime;
                 cell.ExpectedTime = dayData.ExpectedTime;
-                cell.UpdateState();
             }
+
+            // Fill in absence data if available
+            if (absenceLookup.TryGetValue(date, out var absenceDay))
+            {
+                cell.AbsenceType = absenceDay.Type;
+
+                // Track if this is a combined half-holiday situation for visual display
+                cell.IsHalfHolidayCombined = absenceDay.IsHalfHoliday &&
+                    absenceDay.Type is AbsenceType.Vacation or AbsenceType.SickLeave;
+
+                // Combine labels when day has vacation/sick AND is also a half holiday
+                var baseLabel = AbsenceTypeHelper.GetLabel(absenceDay.Type);
+                if (cell.IsHalfHolidayCombined)
+                {
+                    // Show combined label: "Urlaub + H.Feiertag"
+                    cell.AbsenceLabel = $"{baseLabel} + H.Feiertag";
+                }
+                else if (absenceDay.IsPublicHoliday &&
+                    absenceDay.Type is AbsenceType.Vacation or AbsenceType.SickLeave)
+                {
+                    // Full public holiday with vacation
+                    cell.AbsenceLabel = $"{baseLabel} + Feiertag";
+                }
+                else
+                {
+                    cell.AbsenceLabel = baseLabel;
+                }
+
+                cell.AbsenceBorderColor = AbsenceTypeHelper.GetDisplayColor(absenceDay.Type);
+                Log.Debug("Day {Date}: AbsenceType={Type}, Label={Label}, IsHalfHoliday={IsHalfHoliday}, IsHalfHolidayCombined={IsCombined}",
+                    date, absenceDay.Type, cell.AbsenceLabel, absenceDay.IsHalfHoliday, cell.IsHalfHolidayCombined);
+            }
+
+            // Update state AFTER both work time and absence data are set
+            cell.UpdateState();
 
             DayCells.Add(cell);
         }
@@ -328,6 +440,37 @@ public partial class DayCellViewModel : ObservableObject
 
     [ObservableProperty]
     private DayCellState _state = DayCellState.Empty;
+
+    // Absence properties
+    [ObservableProperty]
+    [NotifyPropertyChangedFor(nameof(HasDisplayableAbsence))]
+    private AbsenceType _absenceType = AbsenceType.None;
+
+    [ObservableProperty]
+    private string? _absenceLabel;
+
+    [ObservableProperty]
+    private string? _absenceBorderColor;
+
+    /// <summary>
+    /// Whether this day is a half holiday in combination with another absence type (e.g., Vacation + HalfHoliday).
+    /// Used to show an additional visual indicator.
+    /// </summary>
+    [ObservableProperty]
+    private bool _isHalfHolidayCombined;
+
+    /// <summary>
+    /// Whether this day has an absence that should display a label.
+    /// Excludes None, weekends, public holidays (shown via background), and unknown.
+    /// </summary>
+    /// <summary>
+    /// Whether this day has an absence that should display a label.
+    /// Excludes None, weekends, and unknown types.
+    /// </summary>
+    public bool HasDisplayableAbsence =>
+        AbsenceType != AbsenceType.None &&
+        AbsenceType != AbsenceType.Weekend &&
+        AbsenceType != AbsenceType.Unknown;
 
     /// <summary>
     /// Simple worked time display (e.g., "7:30" or "--").
@@ -413,6 +556,13 @@ public partial class DayCellViewModel : ObservableObject
             return;
         }
         if (ExpectedTime == TimeSpan.Zero)
+        {
+            State = DayCellState.NoWork;
+            return;
+        }
+
+        // Full-day absences (vacation, sick leave) - treat like NoWork, don't show as missing entry
+        if (AbsenceType is AbsenceType.Vacation or AbsenceType.SickLeave or AbsenceType.PublicHoliday)
         {
             State = DayCellState.NoWork;
             return;

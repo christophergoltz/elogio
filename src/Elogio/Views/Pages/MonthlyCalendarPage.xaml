@@ -5,6 +5,7 @@
       xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
       xmlns:ui="http://schemas.lepo.co/wpfui/2022/xaml"
       xmlns:vm="clr-namespace:Elogio.ViewModels"
+      xmlns:dto="clr-namespace:Elogio.Persistence.Dto;assembly=Elogio.Persistence"
       mc:Ignorable="d"
       d:DesignHeight="700" d:DesignWidth="900"
       Title="Monthly Calendar"
@@ -127,6 +128,22 @@
                                         <DataTrigger Binding="{Binding IsWeekend}" Value="True">
                                             <Setter Property="Background" Value="{ui:ThemeResource ControlFillColorSecondaryBrush}" />
                                         </DataTrigger>
+                                        <!-- Public holidays get gray background like weekends -->
+                                        <DataTrigger Binding="{Binding AbsenceType}" Value="{x:Static dto:AbsenceType.PublicHoliday}">
+                                            <Setter Property="Background" Value="{ui:ThemeResource ControlFillColorSecondaryBrush}" />
+                                        </DataTrigger>
+                                        <!-- Vacation gets gray background like weekends -->
+                                        <DataTrigger Binding="{Binding AbsenceType}" Value="{x:Static dto:AbsenceType.Vacation}">
+                                            <Setter Property="Background" Value="{ui:ThemeResource ControlFillColorSecondaryBrush}" />
+                                        </DataTrigger>
+                                        <!-- Sick leave also gets gray background -->
+                                        <DataTrigger Binding="{Binding AbsenceType}" Value="{x:Static dto:AbsenceType.SickLeave}">
+                                            <Setter Property="Background" Value="{ui:ThemeResource ControlFillColorSecondaryBrush}" />
+                                        </DataTrigger>
+                                        <!-- Half holiday gets yellow tint -->
+                                        <DataTrigger Binding="{Binding AbsenceType}" Value="{x:Static dto:AbsenceType.HalfHoliday}">
+                                            <Setter Property="Background" Value="#33FFEB3B" />
+                                        </DataTrigger>
                                         <DataTrigger Binding="{Binding State}" Value="{x:Static vm:DayCellState.MissingEntry}">
                                             <Setter Property="Background" Value="#33F44336" />
                                         </DataTrigger>
@@ -134,52 +151,89 @@
                                 </Style>
                             </Border.Style>
 
-                            <Grid VerticalAlignment="Center">
-                                <Grid.RowDefinitions>
-                                    <RowDefinition Height="Auto" />
-                                    <RowDefinition Height="Auto" />
-                                </Grid.RowDefinitions>
+                                <Grid>
+                                    <!-- Half-holiday indicator in top-right corner -->
+                                    <Ellipse Width="8" Height="8"
+                                             Fill="#FFEB3B"
+                                             HorizontalAlignment="Right"
+                                             VerticalAlignment="Top"
+                                             Margin="0,-2,-2,0"
+                                             Visibility="{Binding IsHalfHolidayCombined, Converter={StaticResource BoolToVisibilityConverter}}"
+                                             ToolTip="Halber Feiertag" />
 
-                                <!-- Day number -->
-                                <TextBlock Grid.Row="0"
-                                           Text="{Binding DayNumber}"
-                                           FontWeight="SemiBold"
-                                           FontSize="13"
-                                           Margin="0,0,0,2">
-                                    <TextBlock.Style>
-                                        <Style TargetType="TextBlock">
-                                            <Style.Triggers>
-                                                <DataTrigger Binding="{Binding IsCurrentMonth}" Value="False">
-                                                    <Setter Property="Visibility" Value="Collapsed" />
-                                                </DataTrigger>
-                                            </Style.Triggers>
-                                        </Style>
-                                    </TextBlock.Style>
-                                </TextBlock>
+                                <Grid VerticalAlignment="Center">
+                                    <Grid.RowDefinitions>
+                                        <RowDefinition Height="Auto" />
+                                        <RowDefinition Height="Auto" />
+                                        <RowDefinition Height="Auto" />
+                                    </Grid.RowDefinitions>
 
-                                <!-- Time display -->
-                                <StackPanel Grid.Row="1">
-                                    <!-- Worked time (larger) + Expected time (smaller, gray) -->
-                                    <StackPanel Orientation="Horizontal" HorizontalAlignment="Center">
-                                        <TextBlock Text="{Binding WorkedDisplay}"
-                                                   FontSize="12"
-                                                   FontWeight="SemiBold"
-                                                   VerticalAlignment="Bottom">
-                                            <TextBlock.Style>
-                                                <Style TargetType="TextBlock">
-                                                    <Setter Property="Foreground" Value="{ui:ThemeResource TextFillColorPrimaryBrush}" />
-                                                    <Style.Triggers>
-                                                        <DataTrigger Binding="{Binding IsCurrentMonth}" Value="False">
-                                                            <Setter Property="Visibility" Value="Collapsed" />
-                                                        </DataTrigger>
-                                                    </Style.Triggers>
-                                                </Style>
-                                            </TextBlock.Style>
-                                        </TextBlock>
-                                        <TextBlock Text="{Binding ExpectedDisplay}"
+                                    <!-- Day number -->
+                                    <TextBlock Grid.Row="0"
+                                               Text="{Binding DayNumber}"
+                                               FontWeight="SemiBold"
+                                               FontSize="13"
+                                               Margin="0,0,0,2">
+                                        <TextBlock.Style>
+                                            <Style TargetType="TextBlock">
+                                                <Style.Triggers>
+                                                    <DataTrigger Binding="{Binding IsCurrentMonth}" Value="False">
+                                                        <Setter Property="Visibility" Value="Collapsed" />
+                                                    </DataTrigger>
+                                                </Style.Triggers>
+                                            </Style>
+                                        </TextBlock.Style>
+                                    </TextBlock>
+
+                                    <!-- Time display -->
+                                    <StackPanel Grid.Row="1">
+                                        <!-- Worked time (larger) + Expected time (smaller, gray) -->
+                                        <StackPanel Orientation="Horizontal" HorizontalAlignment="Center">
+                                            <TextBlock Text="{Binding WorkedDisplay}"
+                                                       FontSize="12"
+                                                       FontWeight="SemiBold"
+                                                       VerticalAlignment="Bottom">
+                                                <TextBlock.Style>
+                                                    <Style TargetType="TextBlock">
+                                                        <Setter Property="Foreground" Value="{ui:ThemeResource TextFillColorPrimaryBrush}" />
+                                                        <Style.Triggers>
+                                                            <DataTrigger Binding="{Binding IsCurrentMonth}" Value="False">
+                                                                <Setter Property="Visibility" Value="Collapsed" />
+                                                            </DataTrigger>
+                                                        </Style.Triggers>
+                                                    </Style>
+                                                </TextBlock.Style>
+                                            </TextBlock>
+                                            <TextBlock Text="{Binding ExpectedDisplay}"
+                                                       FontSize="9"
+                                                       VerticalAlignment="Bottom"
+                                                       Margin="3,0,0,0">
+                                                <TextBlock.Style>
+                                                    <Style TargetType="TextBlock">
+                                                        <Setter Property="Foreground" Value="{ui:ThemeResource TextFillColorTertiaryBrush}" />
+                                                        <Style.Triggers>
+                                                            <DataTrigger Binding="{Binding IsCurrentMonth}" Value="False">
+                                                                <Setter Property="Visibility" Value="Collapsed" />
+                                                            </DataTrigger>
+                                                        </Style.Triggers>
+                                                    </Style>
+                                                </TextBlock.Style>
+                                            </TextBlock>
+                                            <!-- Warning triangle for missing entry (inline) -->
+                                            <TextBlock Text="&#x26A0;"
+                                                       FontSize="11"
+                                                       VerticalAlignment="Bottom"
+                                                       Foreground="#F44336"
+                                                       Margin="4,0,0,0"
+                                                       Visibility="{Binding State, Converter={StaticResource MissingEntryToVisibilityConverter}}" />
+                                        </StackPanel>
+
+                                        <!-- Difference display (separate line) -->
+                                        <TextBlock Text="{Binding DifferenceDisplay}"
                                                    FontSize="9"
-                                                   VerticalAlignment="Bottom"
-                                                   Margin="3,0,0,0">
+                                                   HorizontalAlignment="Center"
+                                                   TextAlignment="Center"
+                                                   Margin="0,1,0,0">
                                             <TextBlock.Style>
                                                 <Style TargetType="TextBlock">
                                                     <Setter Property="Foreground" Value="{ui:ThemeResource TextFillColorTertiaryBrush}" />
@@ -187,46 +241,46 @@
                                                         <DataTrigger Binding="{Binding IsCurrentMonth}" Value="False">
                                                             <Setter Property="Visibility" Value="Collapsed" />
                                                         </DataTrigger>
+                                                        <DataTrigger Binding="{Binding State}" Value="{x:Static vm:DayCellState.OverHours}">
+                                                            <Setter Property="Foreground" Value="#4CAF50" />
+                                                        </DataTrigger>
+                                                        <DataTrigger Binding="{Binding State}" Value="{x:Static vm:DayCellState.UnderHours}">
+                                                            <Setter Property="Foreground" Value="#F44336" />
+                                                        </DataTrigger>
                                                     </Style.Triggers>
                                                 </Style>
                                             </TextBlock.Style>
                                         </TextBlock>
-                                        <!-- Warning triangle for missing entry (inline) -->
-                                        <TextBlock Text="&#x26A0;"
-                                                   FontSize="11"
-                                                   VerticalAlignment="Bottom"
-                                                   Foreground="#F44336"
-                                                   Margin="4,0,0,0"
-                                                   Visibility="{Binding State, Converter={StaticResource MissingEntryToVisibilityConverter}}" />
                                     </StackPanel>
 
-                                    <!-- Difference display (separate line) -->
-                                    <TextBlock Text="{Binding DifferenceDisplay}"
-                                               FontSize="9"
-                                               HorizontalAlignment="Center"
-                                               TextAlignment="Center"
-                                               Margin="0,1,0,0">
-                                        <TextBlock.Style>
-                                            <Style TargetType="TextBlock">
-                                                <Setter Property="Foreground" Value="{ui:ThemeResource TextFillColorTertiaryBrush}" />
-                                                <Style.Triggers>
-                                                    <DataTrigger Binding="{Binding IsCurrentMonth}" Value="False">
-                                                        <Setter Property="Visibility" Value="Collapsed" />
-                                                    </DataTrigger>
-                                                    <DataTrigger Binding="{Binding State}" Value="{x:Static vm:DayCellState.OverHours}">
-                                                        <Setter Property="Foreground" Value="#4CAF50" />
-                                                    </DataTrigger>
-                                                    <DataTrigger Binding="{Binding State}" Value="{x:Static vm:DayCellState.UnderHours}">
-                                                        <Setter Property="Foreground" Value="#F44336" />
-                                                    </DataTrigger>
-                                                </Style.Triggers>
-                                            </Style>
-                                        </TextBlock.Style>
-                                    </TextBlock>
-                                </StackPanel>
-                            </Grid>
-                        </Border>
-                    </DataTemplate>
+                            <!-- Absence label (cyan for vacation, shows only for displayable absences) -->
+                            <TextBlock Grid.Row="2"
+                                       Text="{Binding AbsenceLabel}"
+                                       FontSize="10"
+                                       FontWeight="SemiBold"
+                                       HorizontalAlignment="Center"
+                                       Visibility="{Binding HasDisplayableAbsence, Converter={StaticResource BoolToVisibilityConverter}}"
+                                       Margin="0,2,0,0">
+                                <TextBlock.Style>
+                                    <Style TargetType="TextBlock">
+                                        <Setter Property="Foreground" Value="{ui:ThemeResource TextFillColorSecondaryBrush}" />
+                                        <Style.Triggers>
+                                            <!-- Vacation label in cyan -->
+                                            <DataTrigger Binding="{Binding AbsenceType}" Value="{x:Static dto:AbsenceType.Vacation}">
+                                                <Setter Property="Foreground" Value="#00BCD4" />
+                                            </DataTrigger>
+                                            <!-- Sick leave in red -->
+                                            <DataTrigger Binding="{Binding AbsenceType}" Value="{x:Static dto:AbsenceType.SickLeave}">
+                                                <Setter Property="Foreground" Value="#F44336" />
+                                            </DataTrigger>
+                                        </Style.Triggers>
+                                    </Style>
+                                </TextBlock.Style>
+                            </TextBlock>
+                        </Grid>
+                                </Grid>
+                    </Border>
+                </DataTemplate>
                 </ItemsControl.ItemTemplate>
             </ItemsControl>
         </Grid>
@@ -275,6 +329,9 @@
                                 <Style.Triggers>
                                     <DataTrigger Binding="{Binding Balance, Converter={StaticResource IsNegativeConverter}}" Value="True">
                                         <Setter Property="Foreground" Value="#FF5722" />
+                                    </DataTrigger>
+                                    <DataTrigger Binding="{Binding Balance, Converter={StaticResource IsPositiveConverter}}" Value="True">
+                                        <Setter Property="Foreground" Value="#4CAF50" />
                                     </DataTrigger>
                                 </Style.Triggers>
                             </Style>
