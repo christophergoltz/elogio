@@ -188,7 +188,8 @@ public class KelioClientIntegrationTests
             AutomaticDecompression = DecompressionMethods.GZip | DecompressionMethods.Deflate
         };
 
-        using var httpClient = new HttpClient(handler) { BaseAddress = new Uri(_serverUrl) };
+        using var httpClient = new HttpClient(handler);
+        httpClient.BaseAddress = new Uri(_serverUrl);
         httpClient.DefaultRequestHeaders.TryAddWithoutValidation("User-Agent",
             "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36");
         httpClient.DefaultRequestHeaders.TryAddWithoutValidation("Accept-Encoding", "gzip, deflate, br");

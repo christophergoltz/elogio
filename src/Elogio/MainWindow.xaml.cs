@@ -1,4 +1,5 @@
 using System.Windows;
+using Elogio.Persistence.Dto;
 using Elogio.Services;
 using Elogio.ViewModels;
 using Elogio.Views.Pages;
@@ -11,9 +12,8 @@ namespace Elogio;
 /// <summary>
 /// Main application window with navigation.
 /// </summary>
-public partial class MainWindow : FluentWindow
+public partial class MainWindow
 {
-    private readonly MainViewModel _viewModel;
     private readonly INavigationService _navigationService;
     private readonly IKelioService _kelioService;
     private readonly Snackbar _snackbar;
@@ -28,11 +28,10 @@ public partial class MainWindow : FluentWindow
     {
         InitializeComponent();
 
-        _viewModel = viewModel;
         _navigationService = navigationService;
         _kelioService = kelioService;
 
-        DataContext = _viewModel;
+        DataContext = viewModel;
 
         // Set up navigation service with the content frame
         _navigationService.SetFrame(ContentFrame);
@@ -147,7 +146,7 @@ public partial class MainWindow : FluentWindow
 
                     // Determine current punch state based on number of entries
                     // Odd number of entries = clocked in, Even = clocked out
-                    _punchState = todayData.Entries != null && todayData.Entries.Count % 2 == 1;
+                    _punchState = todayData.Entries.Count % 2 == 1;
                     UpdatePunchButtonState();
                 }
             }
@@ -170,11 +169,11 @@ public partial class MainWindow : FluentWindow
     /// <summary>
     /// Update the time entries display with badge in/out pairs.
     /// </summary>
-    private void UpdateTimeEntriesDisplay(List<Elogio.Persistence.Dto.TimeEntryDto> entries)
+    private void UpdateTimeEntriesDisplay(List<TimeEntryDto> entries)
     {
         TimeEntriesPanel.Children.Clear();
 
-        if (entries == null || entries.Count == 0)
+        if (entries.Count == 0)
         {
             TimeEntriesSeparator.Visibility = Visibility.Collapsed;
             return;
@@ -250,7 +249,7 @@ public partial class MainWindow : FluentWindow
 
             if (result.Success)
             {
-                var typeText = result.Type == Persistence.Dto.PunchType.ClockIn ? "Kommen" : "Gehen";
+                var typeText = result.Type == PunchType.ClockIn ? "Kommen" : "Gehen";
                 var timeText = result.Timestamp?.ToString("HH:mm") ?? "--:--";
                 var message = !string.IsNullOrEmpty(result.Message)
                     ? result.Message
@@ -259,7 +258,7 @@ public partial class MainWindow : FluentWindow
                 ShowSuccessToast(result.Label ?? "Buchung erfolgreich", message);
 
                 // Update button state based on punch result
-                _punchState = result.Type == Persistence.Dto.PunchType.ClockIn;
+                _punchState = result.Type == PunchType.ClockIn;
                 UpdatePunchButtonState();
 
                 // Refresh today's balance display
@@ -344,7 +343,7 @@ public partial class MainWindow : FluentWindow
     {
         // Dark mode enabled
         ApplicationThemeManager.Apply(ApplicationTheme.Dark);
-        ThemeIcon.Symbol = Wpf.Ui.Controls.SymbolRegular.WeatherMoon24;
+        ThemeIcon.Symbol = SymbolRegular.WeatherMoon24;
         ThemeLabel.Text = "Dark Mode";
     }
     
@@ -352,7 +351,7 @@ public partial class MainWindow : FluentWindow
     {
         // Light mode enabled
         ApplicationThemeManager.Apply(ApplicationTheme.Light);
-        ThemeIcon.Symbol = Wpf.Ui.Controls.SymbolRegular.WeatherSunny24;
+        ThemeIcon.Symbol = SymbolRegular.WeatherSunny24;
         ThemeLabel.Text = "Light Mode";
     }
 

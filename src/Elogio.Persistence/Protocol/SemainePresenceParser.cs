@@ -32,7 +32,7 @@ public partial class SemainePresenceParser
         return ParseSemainePresence(message, gwtRpcData);
     }
 
-    private WeekPresenceDto? ParseSemainePresence(GwtRpcMessage message, string rawData)
+    private static WeekPresenceDto ParseSemainePresence(GwtRpcMessage message, string rawData)
     {
         // Find employee name in string table
         var employeeName = FindEmployeeName(message);
@@ -349,7 +349,7 @@ public partial class SemainePresenceParser
         foreach (var date in dates)
         {
             var dateStr = $"{date.Year}{date.Month:D2}{date.Day:D2}";
-            var pos = searchText.LastIndexOf(dateStr);
+            var pos = searchText.LastIndexOf(dateStr, StringComparison.Ordinal);
             if (pos > closestPos)
             {
                 closestPos = pos;

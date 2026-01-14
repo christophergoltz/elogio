@@ -1,5 +1,4 @@
 using System.Windows;
-using System.Windows.Controls;
 using Elogio.ViewModels;
 
 namespace Elogio.Views.Pages;
@@ -7,7 +6,7 @@ namespace Elogio.Views.Pages;
 /// <summary>
 /// Monthly calendar page showing time tracking data.
 /// </summary>
-public partial class MonthlyCalendarPage : Page
+public partial class MonthlyCalendarPage
 {
     private readonly MonthlyCalendarViewModel _viewModel;
     private bool _isInitialized;

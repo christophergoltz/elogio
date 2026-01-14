@@ -2,6 +2,7 @@ using Elogio.Persistence.Dto;
 using Elogio.Persistence.Protocol;
 using Shouldly;
 using Xunit;
+using Xunit.Abstractions;
 
 namespace Elogio.Persistence.Tests.Protocol;
 
@@ -11,7 +12,13 @@ namespace Elogio.Persistence.Tests.Protocol;
 /// </summary>
 public class SemainePresenceParserTests
 {
+    private readonly ITestOutputHelper _testOutputHelper;
     private readonly SemainePresenceParser _parser = new();
+
+    public SemainePresenceParserTests(ITestOutputHelper testOutputHelper)
+    {
+        _testOutputHelper = testOutputHelper;
+    }
 
     #region Test Data
 
@@ -236,13 +243,13 @@ public class SemainePresenceParserTests
         var daysWithEntries = result.Days.Where(d => d.Entries.Count > 0).ToList();
 
         // Log what we found for debugging
-        System.Console.WriteLine($"Days with entries: {daysWithEntries.Count}");
+        _testOutputHelper.WriteLine($"Days with entries: {daysWithEntries.Count}");
         foreach (var day in result.Days)
         {
-            System.Console.WriteLine($"  {day.Date}: {day.Entries.Count} entries");
+            _testOutputHelper.WriteLine($"  {day.Date}: {day.Entries.Count} entries");
             foreach (var entry in day.Entries)
             {
-                System.Console.WriteLine($"    {entry.Time} - {entry.Type}");
+                _testOutputHelper.WriteLine($"    {entry.Time} - {entry.Type}");
             }
         }
     }

@@ -12,7 +12,7 @@
 
     <Page.Resources>
         <!-- Day cell state to background color -->
-        <Style x:Key="DayCellBorder" TargetType="Border">
+        <Style TargetType="Border">
             <Setter Property="BorderBrush" Value="{ui:ThemeResource ControlStrokeColorDefaultBrush}" />
             <Setter Property="BorderThickness" Value="1" />
             <Setter Property="CornerRadius" Value="4" />

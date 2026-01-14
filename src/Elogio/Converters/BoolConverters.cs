@@ -6,12 +6,12 @@ namespace Elogio.Converters;
 
 public class BoolToVisibilityConverter : IValueConverter
 {
-    public object Convert(object value, Type targetType, object parameter, CultureInfo culture)
+    public object Convert(object? value, Type targetType, object? parameter, CultureInfo culture)
     {
         return value is true ? Visibility.Visible : Visibility.Collapsed;
     }
 
-    public object ConvertBack(object value, Type targetType, object parameter, CultureInfo culture)
+    public object ConvertBack(object? value, Type targetType, object? parameter, CultureInfo culture)
     {
         return value is Visibility.Visible;
     }
@@ -19,12 +19,12 @@ public class BoolToVisibilityConverter : IValueConverter
 
 public class InverseBoolConverter : IValueConverter
 {
-    public object Convert(object value, Type targetType, object parameter, CultureInfo culture)
+    public object Convert(object? value, Type targetType, object? parameter, CultureInfo culture)
     {
         return value is not true;
     }
 
-    public object ConvertBack(object value, Type targetType, object parameter, CultureInfo culture)
+    public object ConvertBack(object? value, Type targetType, object? parameter, CultureInfo culture)
     {
         return value is not true;
     }
@@ -32,12 +32,12 @@ public class InverseBoolConverter : IValueConverter
 
 public class InverseBoolToVisibilityConverter : IValueConverter
 {
-    public object Convert(object value, Type targetType, object parameter, CultureInfo culture)
+    public object Convert(object? value, Type targetType, object? parameter, CultureInfo culture)
     {
         return value is true ? Visibility.Collapsed : Visibility.Visible;
     }
 
-    public object ConvertBack(object value, Type targetType, object parameter, CultureInfo culture)
+    public object ConvertBack(object? value, Type targetType, object? parameter, CultureInfo culture)
     {
         return value is not Visibility.Visible;
     }
@@ -45,12 +45,12 @@ public class InverseBoolToVisibilityConverter : IValueConverter
 
 public class NullToVisibilityConverter : IValueConverter
 {
-    public object Convert(object value, Type targetType, object parameter, CultureInfo culture)
+    public object Convert(object? value, Type targetType, object? parameter, CultureInfo culture)
     {
         return value is null or "" ? Visibility.Collapsed : Visibility.Visible;
     }
 
-    public object ConvertBack(object value, Type targetType, object parameter, CultureInfo culture)
+    public object ConvertBack(object? value, Type targetType, object? parameter, CultureInfo culture)
     {
         throw new NotImplementedException();
     }
@@ -58,7 +58,7 @@ public class NullToVisibilityConverter : IValueConverter
 
 public class BoolToBackgroundConverter : IValueConverter
 {
-    public object Convert(object value, Type targetType, object parameter, CultureInfo culture)
+    public object Convert(object? value, Type targetType, object? parameter, CultureInfo culture)
     {
         // Light gray for weekends, transparent for weekdays
         return value is true
@@ -66,7 +66,7 @@ public class BoolToBackgroundConverter : IValueConverter
             : System.Windows.Media.Brushes.Transparent;
     }
 
-    public object ConvertBack(object value, Type targetType, object parameter, CultureInfo culture)
+    public object ConvertBack(object? value, Type targetType, object? parameter, CultureInfo culture)
     {
         throw new NotImplementedException();
     }
@@ -77,7 +77,7 @@ public class BoolToBackgroundConverter : IValueConverter
 /// </summary>
 public class IsNegativeConverter : IValueConverter
 {
-    public object Convert(object value, Type targetType, object parameter, CultureInfo culture)
+    public object Convert(object? value, Type targetType, object? parameter, CultureInfo culture)
     {
         return value switch
         {
@@ -90,7 +90,7 @@ public class IsNegativeConverter : IValueConverter
         };
     }
 
-    public object ConvertBack(object value, Type targetType, object parameter, CultureInfo culture)
+    public object ConvertBack(object? value, Type targetType, object? parameter, CultureInfo culture)
     {
         throw new NotImplementedException();
     }
@@ -101,13 +101,13 @@ public class IsNegativeConverter : IValueConverter
 /// </summary>
 public class MissingEntryToVisibilityConverter : IValueConverter
 {
-    public object Convert(object value, Type targetType, object parameter, CultureInfo culture)
+    public object Convert(object? value, Type targetType, object? parameter, CultureInfo culture)
     {
         // Need to reference the enum - use string comparison for simplicity
         return value?.ToString() == "MissingEntry" ? Visibility.Visible : Visibility.Collapsed;
     }
 
-    public object ConvertBack(object value, Type targetType, object parameter, CultureInfo culture)
+    public object ConvertBack(object? value, Type targetType, object? parameter, CultureInfo culture)
     {
         throw new NotImplementedException();
     }

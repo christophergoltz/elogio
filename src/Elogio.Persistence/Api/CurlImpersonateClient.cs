@@ -320,20 +320,15 @@ public sealed class CurlImpersonateClient : IDisposable
             processArgs = $"\"{_executablePath}\" {arguments}";
         }
 
-        using var process = new Process
-        {
-            StartInfo = new ProcessStartInfo
-            {
-                FileName = fileName,
-                Arguments = processArgs,
-                UseShellExecute = false,
-                RedirectStandardOutput = true,
-                RedirectStandardError = true,
-                CreateNoWindow = true,
-                StandardOutputEncoding = Encoding.UTF8,
-                StandardErrorEncoding = Encoding.UTF8
-            }
-        };
+        using var process = new Process();
+        process.StartInfo.FileName = fileName;
+        process.StartInfo.Arguments = processArgs;
+        process.StartInfo.UseShellExecute = false;
+        process.StartInfo.RedirectStandardOutput = true;
+        process.StartInfo.RedirectStandardError = true;
+        process.StartInfo.CreateNoWindow = true;
+        process.StartInfo.StandardOutputEncoding = Encoding.UTF8;
+        process.StartInfo.StandardErrorEncoding = Encoding.UTF8;
 
         process.Start();
 

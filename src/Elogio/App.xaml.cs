@@ -9,7 +9,7 @@ using Velopack;
 
 namespace Elogio;
 
-public partial class App : Application
+public partial class App
 {
     private static IServiceProvider? _serviceProvider;
 

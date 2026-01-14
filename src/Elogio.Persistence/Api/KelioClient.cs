@@ -24,9 +24,7 @@ public partial class KelioClient : IDisposable
     private readonly HttpClient _httpClient;
     private readonly HttpClient _bwpClient;
     private readonly CurlImpersonateClient _curlClient;
-    private readonly IKelioAuthApi _authApi;
     private readonly IKelioApi _kelioApi;
-    private readonly CookieContainer _cookieContainer;
     private readonly GwtRpcRequestBuilder _requestBuilder = new();
     private readonly SemainePresenceParser _presenceParser = new();
     private readonly BadgerSignalerResponseParser _punchParser = new();
@@ -58,7 +56,7 @@ public partial class KelioClient : IDisposable
     public KelioClient(string baseUrl)
     {
         _baseUrl = baseUrl.TrimEnd('/');
-        _cookieContainer = new CookieContainer();
+        var cookieContainer = new CookieContainer();
 
         // Clear log file for fresh start
         LoggingDelegatingHandler.ClearLog();
@@ -66,7 +64,7 @@ public partial class KelioClient : IDisposable
         // Auth handler - don't follow redirects to detect 302
         var authHandler = new HttpClientHandler
         {
-            CookieContainer = _cookieContainer,
+            CookieContainer = cookieContainer,
             AllowAutoRedirect = false,
             UseCookies = true
         };
@@ -75,7 +73,7 @@ public partial class KelioClient : IDisposable
         var loggingHandler = new LoggingDelegatingHandler
         {
             InnerHandler = authHandler,
-            CookieContainer = _cookieContainer
+            CookieContainer = cookieContainer
         };
 
         _httpClient = new HttpClient(loggingHandler)
@@ -86,21 +84,19 @@ public partial class KelioClient : IDisposable
         _httpClient.DefaultRequestHeaders.Add("Accept", "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8");
         _httpClient.DefaultRequestHeaders.Add("Accept-Language", "de-DE,de;q=0.9,en;q=0.8");
 
-        // Auth API (no BWP encoding)
-        _authApi = RestService.For<IKelioAuthApi>(_httpClient);
 
         // BWP API (with encoding handler) - needs separate handler chain (fallback if curl not available)
         var bwpInnerHandler = new HttpClientHandler
         {
-            CookieContainer = _cookieContainer,
+            CookieContainer = cookieContainer,
             AllowAutoRedirect = true,
             UseCookies = true,
-            AutomaticDecompression = System.Net.DecompressionMethods.GZip | System.Net.DecompressionMethods.Deflate
+            AutomaticDecompression = DecompressionMethods.GZip | DecompressionMethods.Deflate
         };
         var bwpLoggingHandler = new LoggingDelegatingHandler
         {
             InnerHandler = bwpInnerHandler,
-            CookieContainer = _cookieContainer
+            CookieContainer = cookieContainer
         };
         var bwpHandler = new BwpDelegatingHandler { InnerHandler = bwpLoggingHandler };
         _bwpClient = new HttpClient(bwpHandler) { BaseAddress = new Uri(baseUrl) };
@@ -524,7 +520,7 @@ public partial class KelioClient : IDisposable
                     {
                         lastNameStrIdx = i;
                     }
-                    else if (firstNameStrIdx < 0)
+                    else
                     {
                         firstNameStrIdx = i;
                         break; // Found both
@@ -554,9 +550,8 @@ public partial class KelioClient : IDisposable
                 if (tokenVal == firstNameStrIdx)
                 {
                     // Pattern should be: EMPLOYEE_ID, 4, firstNameStrIdx, 4, lastNameStrIdx
-                    // So employee ID is at i-2
-                    if (i >= 2 &&
-                        int.TryParse(dataTokens[i - 1], out var typeRef) && typeRef == 4 &&
+                    // So employee ID is at i-2 (loop guarantees i >= 2)
+                    if (int.TryParse(dataTokens[i - 1], out var typeRef) && typeRef == 4 &&
                         int.TryParse(dataTokens[i - 2], out var employeeId) &&
                         employeeId >= 100 && employeeId <= 9999)
                     {

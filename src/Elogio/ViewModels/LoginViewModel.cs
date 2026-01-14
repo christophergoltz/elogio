@@ -41,6 +41,7 @@ public partial class LoginViewModel : ObservableObject
 
     partial void OnErrorMessageChanged(string? value)
     {
+        _ = value; // Unused but required by partial method signature
         OnPropertyChanged(nameof(HasError));
     }
 

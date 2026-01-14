@@ -12,6 +12,7 @@ public class LoggingDelegatingHandler : DelegatingHandler
     /// Optional CookieContainer to log cookies from.
     /// </summary>
     public CookieContainer? CookieContainer { get; set; }
+
     private static readonly string LogFile = Path.Combine(
         Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),
         "Elogio",
@@ -50,8 +51,10 @@ public class LoggingDelegatingHandler : DelegatingHandler
             sb.AppendLine($"  Total cookies: {cookies.Count}");
             foreach (Cookie cookie in cookies)
             {
-                sb.AppendLine($"  {cookie.Name}={cookie.Value} (Path={cookie.Path}, Domain={cookie.Domain}, Secure={cookie.Secure}, HttpOnly={cookie.HttpOnly}, Expires={cookie.Expires})");
+                sb.AppendLine(
+                    $"  {cookie.Name}={cookie.Value} (Path={cookie.Path}, Domain={cookie.Domain}, Secure={cookie.Secure}, HttpOnly={cookie.HttpOnly}, Expires={cookie.Expires})");
             }
+
             if (cookies.Count == 0)
             {
                 // Check all cookies in container
@@ -82,6 +85,7 @@ public class LoggingDelegatingHandler : DelegatingHandler
                     {
                         body = body[..2000] + "... [truncated]";
                     }
+
                     sb.AppendLine($"\n--- Request Body ({body.Length} chars) ---");
                     sb.AppendLine(body);
                 }
@@ -110,7 +114,7 @@ public class LoggingDelegatingHandler : DelegatingHandler
         }
 
         var respSb = new StringBuilder();
-        respSb.AppendLine($"\n--- Response: {(int)response.StatusCode} {response.StatusCode} ---");
+        respSb.AppendLine($"\n--- Response: {(int) response.StatusCode} {response.StatusCode} ---");
 
         respSb.AppendLine("\n--- Response Headers ---");
         foreach (var header in response.Headers)
@@ -118,32 +122,30 @@ public class LoggingDelegatingHandler : DelegatingHandler
             respSb.AppendLine($"  {header.Key}: {string.Join(", ", header.Value)}");
         }
 
-        if (response.Content != null)
+        respSb.AppendLine("\n--- Content Headers ---");
+        foreach (var header in response.Content.Headers)
         {
-            respSb.AppendLine("\n--- Content Headers ---");
-            foreach (var header in response.Content.Headers)
-            {
-                respSb.AppendLine($"  {header.Key}: {string.Join(", ", header.Value)}");
-            }
+            respSb.AppendLine($"  {header.Key}: {string.Join(", ", header.Value)}");
+        }
 
-            try
+        try
+        {
+            var body = await response.Content.ReadAsStringAsync(cancellationToken);
+            if (!string.IsNullOrEmpty(body))
             {
-                var body = await response.Content.ReadAsStringAsync(cancellationToken);
-                if (!string.IsNullOrEmpty(body))
+                // Truncate very long bodies
+                if (body.Length > 5000)
                 {
-                    // Truncate very long bodies
-                    if (body.Length > 5000)
-                    {
-                        body = body[..5000] + "... [truncated]";
-                    }
-                    respSb.AppendLine($"\n--- Response Body ({body.Length} chars) ---");
-                    respSb.AppendLine(body);
+                    body = body[..5000] + "... [truncated]";
                 }
+
+                respSb.AppendLine($"\n--- Response Body ({body.Length} chars) ---");
+                respSb.AppendLine(body);
             }
-            catch
-            {
-                respSb.AppendLine("\n--- Response Body: [could not read] ---");
-            }
+        }
+        catch
+        {
+            respSb.AppendLine("\n--- Response Body: [could not read] ---");
         }
 
         respSb.AppendLine($"\n{'=',-60}\n");
