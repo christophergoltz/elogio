@@ -149,8 +149,8 @@ public class KelioService : IKelioService, IDisposable
                 if (result != null)
                 {
                     Log.Information("Fetched week {WeekStart}: {DayCount} days, dates: {Dates}",
-                        weekStart, result.Days?.Count ?? 0,
-                        result.Days != null ? string.Join(", ", result.Days.Select(d => d.Date.ToString("MM-dd"))) : "none");
+                        weekStart, result.Days.Count,
+                        string.Join(", ", result.Days.Select(d => d.Date.ToString("MM-dd"))));
                 }
                 else
                 {

@@ -1,4 +1,3 @@
-using System.Net.Http.Headers;
 using System.Text;
 using Elogio.Persistence.Protocol;
 
@@ -65,14 +64,11 @@ public class BwpDelegatingHandler : DelegatingHandler
         var response = await base.SendAsync(request, cancellationToken);
 
         // Decode response body if BWP-encoded
-        if (response.Content is not null)
+        var responseContent = await response.Content.ReadAsStringAsync(cancellationToken);
+        if (_codec.IsBwp(responseContent))
         {
-            var responseContent = await response.Content.ReadAsStringAsync(cancellationToken);
-            if (_codec.IsBwp(responseContent))
-            {
-                var decoded = _codec.Decode(responseContent);
-                response.Content = new StringContent(decoded.Decoded, Encoding.UTF8, "text/plain");
-            }
+            var decoded = _codec.Decode(responseContent);
+            response.Content = new StringContent(decoded.Decoded, Encoding.UTF8, "text/plain");
         }
 
         return response;

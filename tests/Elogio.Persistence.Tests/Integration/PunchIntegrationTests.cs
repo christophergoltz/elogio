@@ -24,9 +24,7 @@ public class PunchIntegrationTests
 
     // Test constants (anonymized)
     private const string TestSessionId1 = "00000000-0000-0000-0000-000000000001";
-    private const string TestSessionId2 = "00000000-0000-0000-0000-000000000002";
     private const int TestEmployeeId1 = 12345;
-    private const int TestEmployeeId2 = 67890;
 
     #region Test Fixtures (anonymized from HAR captures)
 
@@ -38,11 +36,6 @@ public class PunchIntegrationTests
     // Clock-in response format
     private const string ClockInResponseDecoded = """
         8,"com.bodet.bwt.core.type.communication.BWPResponse","NULL","com.bodet.bwt.portail.serveur.domain.portail.vignette.badger_signaler.resultat.PortailVignetteBadgerSignalerResultatMessageBWT","java.lang.Boolean","java.lang.String","Beginnen/beenden","java.util.List","Letzte Buchung um 09:26 (Kommen)",0,1,2,3,1,3,0,3,1,4,5,6,1,4,7,1,3,0
-        """;
-
-    // Clock-out request format
-    private const string ClockOutRequestDecoded = """
-        9,"com.bodet.bwt.core.type.communication.BWPRequest","java.util.List","NULL","java.lang.Boolean","java.lang.Integer","java.lang.String","00000000-0000-0000-0000-000000000002","badgerSignaler","com.bodet.bwt.portail.serveur.service.commun.vignette.presence.BadgerSignalerPortailBWTService",0,1,3,2,2,3,0,4,67890,5,6,5,7,5,8
         """;
 
     // Clock-out response format
@@ -290,8 +283,8 @@ public class PunchIntegrationTests
 
             punchType.ShouldBe(expectedType);
             timestamp.ShouldNotBeNull();
-            timestamp!.Value.Hour.ShouldBe(expectedHour);
-            timestamp!.Value.Minute.ShouldBe(expectedMinute);
+            timestamp.Value.Hour.ShouldBe(expectedHour);
+            timestamp.Value.Minute.ShouldBe(expectedMinute);
         }
     }
 

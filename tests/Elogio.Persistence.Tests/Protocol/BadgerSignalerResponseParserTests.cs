@@ -206,8 +206,8 @@ public class BadgerSignalerResponseParserTests
         var result = PunchResultDto.ParseTimeFromMessage(message);
 
         result.ShouldNotBeNull();
-        result!.Value.Hour.ShouldBe(expectedHour);
-        result!.Value.Minute.ShouldBe(expectedMinute);
+        result.Value.Hour.ShouldBe(expectedHour);
+        result.Value.Minute.ShouldBe(expectedMinute);
     }
 
     [Theory]

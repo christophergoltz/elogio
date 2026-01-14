@@ -1,4 +1,3 @@
-using System.Windows.Controls;
 using Elogio.Services;
 using Elogio.ViewModels;
 
@@ -7,7 +6,7 @@ namespace Elogio.Views.Pages;
 /// <summary>
 /// Login page for authentication.
 /// </summary>
-public partial class LoginPage : Page
+public partial class LoginPage
 {
     private readonly LoginViewModel _viewModel;
 

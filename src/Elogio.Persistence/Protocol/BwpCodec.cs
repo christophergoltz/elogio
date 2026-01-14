@@ -31,11 +31,12 @@ public class BwpCodec
     /// </summary>
     /// <param name="data">The BWP-encoded string</param>
     /// <returns>A BwpMessage containing the decoded data</returns>
-    public BwpMessage Decode(string data)
+    public BwpMessage Decode(string? data)
     {
         if (string.IsNullOrEmpty(data) || data[0] != Marker)
         {
-            return new BwpMessage(data ?? "", false, [], data ?? "", 0);
+            var raw = data ?? string.Empty;
+            return new BwpMessage(raw, false, [], raw, 0);
         }
 
         // Read key count from byte 1
@@ -68,10 +69,10 @@ public class BwpCodec
     /// <param name="data">The plain text to encode</param>
     /// <param name="keys">Optional keys to use; random keys generated if null</param>
     /// <returns>BWP-encoded string</returns>
-    public string Encode(string data, int[]? keys = null)
+    public string Encode(string? data, int[]? keys = null)
     {
         if (string.IsNullOrEmpty(data))
-            return data ?? "";
+            return data ?? string.Empty;
 
         // Generate keys if not provided
         keys ??= GenerateKeys();

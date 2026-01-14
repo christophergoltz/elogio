@@ -15,11 +15,11 @@ public class GwtRpcTokenizer
     /// <summary>
     /// Tokenize a GWT-RPC formatted string into individual tokens.
     /// </summary>
-    public GwtRpcMessage Tokenize(string data)
+    public GwtRpcMessage Tokenize(string? data)
     {
         if (string.IsNullOrEmpty(data))
         {
-            return new GwtRpcMessage([], [], data ?? "");
+            return new GwtRpcMessage([], [], data ?? string.Empty);
         }
 
         var tokens = new List<GwtRpcToken>();

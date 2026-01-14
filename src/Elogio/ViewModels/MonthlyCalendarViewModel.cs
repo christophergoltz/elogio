@@ -2,7 +2,6 @@ using System.Collections.ObjectModel;
 using System.Globalization;
 using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
-using Elogio.Persistence.Dto;
 using Elogio.Services;
 using Serilog;
 
