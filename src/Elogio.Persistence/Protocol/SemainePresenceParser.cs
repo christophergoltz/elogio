@@ -206,7 +206,11 @@ public partial class SemainePresenceParser
 
         for (int i = 0; i < 7; i++)
         {
-            var date = i < dates.Count ? dates[i] : DateOnly.FromDateTime(DateTime.Today).AddDays(i);
+            var date = i < dates.Count
+                ? dates[i]
+                : dates.Count > 0
+                    ? dates[0].AddDays(i)
+                    : DateOnly.FromDateTime(DateTime.Today).AddDays(i);
             var (workedSeconds, expectedSeconds) = i < dailyTimes.Count ? dailyTimes[i] : (0, 0);
 
             // Get badge entries for this date if available

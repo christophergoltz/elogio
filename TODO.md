@@ -5,8 +5,8 @@
 - [x] Unused usings entfernen
 - [x] Redundante null-checks entfernen
 - [x] Unbenutztes `_authApi` Feld entfernen
-- [ ] Verbleibende Rider-Warnungen beheben (~62)
-- [ ] Fehlgeschlagenen Test fixen (`SemainePresenceParserTests.Parse_RealResponse_WeekendDaysHaveZeroExpected`)
+- [x] Verbleibende Rider-Warnungen beheben (~62)
+- [x] Fehlgeschlagenen Test fixen (`SemainePresenceParserTests.Parse_RealResponse_WeekendDaysHaveZeroExpected`)
 
 ## 2. Abwesenheiten in Monatsansicht
 
