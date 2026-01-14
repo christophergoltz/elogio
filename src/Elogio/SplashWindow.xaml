@@ -1,0 +1,32 @@
+<ui:FluentWindow x:Class="Elogio.SplashWindow"
+                 xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+                 xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+                 xmlns:ui="http://schemas.lepo.co/wpfui/2022/xaml"
+                 Title="Elogio"
+                 Width="350" Height="200"
+                 WindowStartupLocation="CenterScreen"
+                 WindowStyle="None"
+                 ResizeMode="NoResize"
+                 ExtendsContentIntoTitleBar="True"
+                 WindowBackdropType="Mica">
+
+    <Grid>
+        <StackPanel VerticalAlignment="Center" HorizontalAlignment="Center">
+            <TextBlock Text="ELOGIO"
+                       FontSize="32"
+                       FontWeight="Bold"
+                       HorizontalAlignment="Center"
+                       Foreground="{ui:ThemeResource TextFillColorPrimaryBrush}" />
+
+            <ui:ProgressRing IsIndeterminate="True"
+                             Width="40" Height="40"
+                             Margin="0,24,0,0" />
+
+            <TextBlock Text="Connecting..."
+                       FontSize="14"
+                       HorizontalAlignment="Center"
+                       Margin="0,16,0,0"
+                       Foreground="{ui:ThemeResource TextFillColorSecondaryBrush}" />
+        </StackPanel>
+    </Grid>
+</ui:FluentWindow>

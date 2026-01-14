@@ -1,0 +1,19 @@
+<Project Sdk="Microsoft.NET.Sdk">
+    <PropertyGroup>
+        <OutputType>WinExe</OutputType>
+        <UseWPF>true</UseWPF>
+    </PropertyGroup>
+
+    <ItemGroup>
+        <PackageReference Include="CommunityToolkit.Mvvm"/>
+        <PackageReference Include="Velopack"/>
+        <PackageReference Include="Serilog"/>
+        <PackageReference Include="Serilog.Sinks.File"/>
+        <PackageReference Include="System.Security.Cryptography.ProtectedData"/>
+        <PackageReference Include="WPF-UI"/>
+    </ItemGroup>
+
+    <ItemGroup>
+        <ProjectReference Include="..\Elogio.Persistence\Elogio.Persistence.csproj"/>
+    </ItemGroup>
+</Project>

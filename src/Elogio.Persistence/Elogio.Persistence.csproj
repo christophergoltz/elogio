@@ -1,0 +1,29 @@
+<Project Sdk="Microsoft.NET.Sdk">
+    <PropertyGroup>
+        <TargetFramework>net9.0</TargetFramework>
+    </PropertyGroup>
+
+    <ItemGroup>
+        <PackageReference Include="Microsoft.Extensions.Http" />
+        <PackageReference Include="Microsoft.Extensions.DependencyInjection" />
+        <PackageReference Include="Microsoft.Extensions.Options" />
+        <PackageReference Include="System.Text.Json" />
+        <PackageReference Include="Serilog" />
+        <PackageReference Include="Refit" />
+        <PackageReference Include="Refit.HttpClientFactory" />
+    </ItemGroup>
+
+    <!-- TLS fingerprint impersonation tools -->
+    <ItemGroup>
+        <!-- Standalone exe (no Python required) - preferred, but optional -->
+        <None Include="tools\curl_proxy.exe" Condition="Exists('tools\curl_proxy.exe')">
+            <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+            <Link>tools\curl_proxy.exe</Link>
+        </None>
+        <!-- Python script fallback (requires Python + curl_cffi) -->
+        <None Include="Scripts\curl_proxy.py">
+            <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+            <Link>Scripts\curl_proxy.py</Link>
+        </None>
+    </ItemGroup>
+</Project>
