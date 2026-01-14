@@ -37,6 +37,9 @@ jobs:
         with:
           dotnet-version: '9.0.x'
 
+      - name: Install Velopack CLI
+        run: dotnet tool install -g vpk
+
       - name: Restore dependencies
         run: dotnet restore
 
@@ -58,11 +61,27 @@ jobs:
             -p:DebugSymbols=false `
             -p:Version=${{ needs.release-please.outputs.version }}
 
-      - name: Create ZIP archive
-        run: Compress-Archive -Path ./publish/* -DestinationPath Elogio-${{ needs.release-please.outputs.tag_name }}-win-x64.zip
+      - name: Download previous releases for delta generation
+        run: |
+          vpk download github `
+            --repoUrl https://github.com/${{ github.repository }} `
+            --token ${{ secrets.GITHUB_TOKEN }} `
+            --outputDir ./releases
+        continue-on-error: true
 
-      - name: Upload Release Asset
-        uses: softprops/action-gh-release@v2
-        with:
-          tag_name: ${{ needs.release-please.outputs.tag_name }}
-          files: Elogio-${{ needs.release-please.outputs.tag_name }}-win-x64.zip
+      - name: Create Velopack packages
+        run: |
+          vpk pack `
+            --packId Elogio `
+            --packVersion ${{ needs.release-please.outputs.version }} `
+            --packDir ./publish `
+            --mainExe Elogio.exe `
+            --outputDir ./velopack-output
+
+      - name: Upload to GitHub Releases
+        run: |
+          vpk upload github `
+            --repoUrl https://github.com/${{ github.repository }} `
+            --token ${{ secrets.GITHUB_TOKEN }} `
+            --tag ${{ needs.release-please.outputs.tag_name }} `
+            --outputDir ./velopack-output

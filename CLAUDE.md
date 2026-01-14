@@ -217,6 +217,25 @@ HTTP traffic is logged to: `%LOCALAPPDATA%\Elogio\http_log.txt`
 - **Error handling** - handle edge cases properly
 - **Performance awareness** - consider efficiency without premature optimization
 
+## CRITICAL: Windows Reserved Filenames
+
+**NEVER create files with Windows reserved names!**
+
+These names are reserved device names and cannot be easily deleted:
+- `nul`, `con`, `prn`, `aux`
+- `com1`-`com9`, `lpt1`-`lpt9`
+
+**Common mistakes:**
+- Redirecting output to `nul` in a way that creates a file instead of discarding
+- Using these names as variable placeholders that end up as filenames
+
+If a `nul` file is accidentally created, delete it with:
+```powershell
+cmd /c "del \\?\C:\path\to\nul"
+```
+
+---
+
 ## CRITICAL: No Sensitive Data in Git
 
 **NEVER commit sensitive data to the repository.**

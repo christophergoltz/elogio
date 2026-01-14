@@ -5,7 +5,6 @@ using Elogio.ViewModels;
 using Elogio.Views.Pages;
 using Microsoft.Extensions.DependencyInjection;
 using Serilog;
-using Velopack;
 
 namespace Elogio;
 
@@ -35,9 +34,6 @@ public partial class App
             .CreateLogger();
 
         Log.Information("Elogio starting up...");
-
-        // Velopack update handling
-        VelopackApp.Build().Run();
 
         // Build service provider
         var services = new ServiceCollection();
@@ -115,6 +111,7 @@ public partial class App
         services.AddSingleton<ISettingsService, SettingsService>();
         services.AddSingleton<IKelioService, KelioService>();
         services.AddSingleton<INavigationService, NavigationService>();
+        services.AddSingleton<IUpdateService, UpdateService>();
 
         // ViewModels (Singleton for shell, Transient for pages)
         services.AddSingleton<MainViewModel>();

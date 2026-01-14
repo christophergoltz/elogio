@@ -2,6 +2,7 @@
     <PropertyGroup>
         <OutputType>WinExe</OutputType>
         <UseWPF>true</UseWPF>
+        <StartupObject>Elogio.Program</StartupObject>
     </PropertyGroup>
 
     <ItemGroup>

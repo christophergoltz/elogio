@@ -37,17 +37,17 @@
 
 ## 6. GitHub CI/CD Pipeline
 
-- [ ] GitHub Actions Workflow erstellen
-- [ ] Build & Test bei Push/PR
-- [ ] Release-Build bei Tag/Release
+- [x] GitHub Actions Workflow erstellen
+- [x] Build & Test bei Push/PR
+- [x] Release-Build bei Tag/Release
 
 ## 7. Automatische Client-Updates (Velopack)
 
-- [ ] Velopack NuGet-Paket integrieren
-- [ ] Update-Check beim App-Start implementieren
-- [ ] GitHub Releases als Update-Quelle konfigurieren
-- [ ] Installer/Setup mit Velopack erstellen
-- [ ] Delta-Updates aktivieren (nur Änderungen downloaden)
+- [x] Velopack NuGet-Paket integrieren
+- [x] Update-Check beim App-Start implementieren
+- [x] GitHub Releases als Update-Quelle konfigurieren
+- [x] Installer/Setup mit Velopack erstellen
+- [x] Delta-Updates aktivieren (nur Änderungen downloaden)
 
 ---
 

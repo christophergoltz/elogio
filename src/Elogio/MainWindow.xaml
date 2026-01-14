@@ -4,13 +4,14 @@
                  xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
                  xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
                  xmlns:ui="http://schemas.lepo.co/wpfui/2022/xaml"
+                 xmlns:viewModels="clr-namespace:Elogio.ViewModels"
                  mc:Ignorable="d"
-                 Title="Elogio - Kelio Client"
+                 Title="{Binding Title}"
                  Height="700" Width="1100"
                  MinHeight="500" MinWidth="800"
                  WindowStartupLocation="CenterScreen"
                  ExtendsContentIntoTitleBar="True"
-                 WindowBackdropType="Mica">
+                 WindowBackdropType="Mica" d:DataContext="{d:DesignInstance viewModels:MainViewModel}">
 
     <Grid>
         <Grid.RowDefinitions>
@@ -20,12 +21,57 @@
 
         <!-- Title Bar -->
         <ui:TitleBar Grid.Row="0"
-                     Title="Elogio"
+                     Title="{Binding Title}"
                      ShowMaximize="True"
                      ShowMinimize="True" />
 
         <!-- Main Content Area -->
         <Grid Grid.Row="1">
+            <!-- Update Available Banner -->
+            <Border x:Name="UpdateBanner"
+                    Visibility="Collapsed"
+                    Background="{ui:ThemeResource SystemFillColorNeutralBackgroundBrush}"
+                    VerticalAlignment="Top"
+                    Panel.ZIndex="100"
+                    Padding="16,10">
+                <Grid>
+                    <Grid.ColumnDefinitions>
+                        <ColumnDefinition Width="Auto"/>
+                        <ColumnDefinition Width="*"/>
+                        <ColumnDefinition Width="Auto"/>
+                        <ColumnDefinition Width="Auto"/>
+                    </Grid.ColumnDefinitions>
+
+                    <ui:SymbolIcon Grid.Column="0"
+                                   Symbol="ArrowDownload24"
+                                   FontSize="20"
+                                   Margin="0,0,12,0"
+                                   VerticalAlignment="Center"/>
+
+                    <StackPanel Grid.Column="1" VerticalAlignment="Center">
+                        <TextBlock x:Name="UpdateVersionText"
+                                   Text="A new version is available"
+                                   FontWeight="SemiBold"/>
+                        <TextBlock x:Name="UpdateDetailsText"
+                                   Text="Click 'Install Now' to update and restart"
+                                   FontSize="12"
+                                   Foreground="{ui:ThemeResource TextFillColorSecondaryBrush}"/>
+                    </StackPanel>
+
+                    <ui:Button Grid.Column="2"
+                               x:Name="InstallUpdateButton"
+                               Content="Install Now"
+                               Appearance="Primary"
+                               Margin="8,0"
+                               Click="InstallUpdateButton_Click"/>
+
+                    <ui:Button Grid.Column="3"
+                               Content="Later"
+                               Appearance="Secondary"
+                               Click="DismissUpdateButton_Click"/>
+                </Grid>
+            </Border>
+
             <!-- Main layout with sidebar (hidden during login) -->
             <Grid x:Name="MainLayout" Visibility="Collapsed">
                 <Grid.ColumnDefinitions>
