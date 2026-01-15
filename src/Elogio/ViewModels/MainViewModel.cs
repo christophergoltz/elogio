@@ -1,4 +1,5 @@
 using System.Windows.Media;
+using System.Windows.Threading;
 using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
 using Elogio.Services;
@@ -20,10 +21,14 @@ public enum UpdateCheckStatus
     Error
 }
 
-public partial class MainViewModel : ObservableObject
+public partial class MainViewModel : ObservableObject, IDisposable
 {
+    private const int UpdateCheckIntervalMinutes = 30;
+
     private readonly INavigationService _navigationService;
     private readonly IUpdateService _updateService;
+    private readonly DispatcherTimer _updateCheckTimer;
+    private bool _disposed;
 
     [ObservableProperty]
     private string _title;
@@ -51,6 +56,39 @@ public partial class MainViewModel : ObservableObject
 
         // Subscribe to update available event
         _updateService.UpdateAvailable += OnUpdateAvailable;
+
+        // Setup periodic update check timer
+        _updateCheckTimer = new DispatcherTimer
+        {
+            Interval = TimeSpan.FromMinutes(UpdateCheckIntervalMinutes)
+        };
+        _updateCheckTimer.Tick += async (_, _) => await CheckForUpdatesAsync();
+    }
+
+    /// <summary>
+    /// Start initial update check and periodic timer.
+    /// Call this when the window is ready.
+    /// </summary>
+    public async Task StartUpdateChecksAsync()
+    {
+        // Initial check
+        await CheckForUpdatesAsync();
+
+        // Start periodic checks (only if not already found an update)
+        if (UpdateStatus != UpdateCheckStatus.UpdateAvailable)
+        {
+            _updateCheckTimer.Start();
+            Log.Information("Periodic update check started (every {Minutes} minutes)", UpdateCheckIntervalMinutes);
+        }
+    }
+
+    /// <summary>
+    /// Stop periodic update checks.
+    /// </summary>
+    public void StopUpdateChecks()
+    {
+        _updateCheckTimer.Stop();
+        Log.Information("Periodic update check stopped");
     }
 
     /// <summary>
@@ -109,6 +147,8 @@ public partial class MainViewModel : ObservableObject
                 UpdateStatusText = $"Update {version} available";
                 UpdateStatusBrush = new SolidColorBrush(Color.FromRgb(0x21, 0x96, 0xF3)); // Blue
                 UpdateStatusIcon = SymbolRegular.ArrowDownload24;
+                // Stop periodic checks once update is found
+                _updateCheckTimer.Stop();
                 break;
 
             case UpdateCheckStatus.Error:
@@ -135,5 +175,14 @@ public partial class MainViewModel : ObservableObject
     private void NavigateToCalendar()
     {
         _navigationService.Navigate<MonthlyCalendarPage>();
+    }
+
+    public void Dispose()
+    {
+        if (_disposed) return;
+        _disposed = true;
+
+        _updateCheckTimer.Stop();
+        _updateService.UpdateAvailable -= OnUpdateAvailable;
     }
 }

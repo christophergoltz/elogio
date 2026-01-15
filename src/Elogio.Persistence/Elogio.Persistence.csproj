@@ -15,13 +15,13 @@
 
     <!-- TLS fingerprint impersonation tools -->
     <ItemGroup>
-        <!-- Standalone exe (no Python required) - preferred, but optional -->
+        <!-- Standalone exe (no Python required) - preferred -->
         <None Include="tools\curl_proxy.exe" Condition="Exists('tools\curl_proxy.exe')">
             <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
             <Link>tools\curl_proxy.exe</Link>
         </None>
-        <!-- Python script fallback (requires Python + curl_cffi) -->
-        <None Include="Scripts\curl_proxy.py">
+        <!-- Python script fallback - only included if exe doesn't exist (dev mode) -->
+        <None Include="Scripts\curl_proxy.py" Condition="!Exists('tools\curl_proxy.exe')">
             <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
             <Link>Scripts\curl_proxy.py</Link>
         </None>
