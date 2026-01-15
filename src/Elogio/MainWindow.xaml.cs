@@ -5,7 +5,6 @@ using Elogio.ViewModels;
 using Elogio.Views.Pages;
 using Microsoft.Extensions.DependencyInjection;
 using Serilog;
-using Wpf.Ui.Appearance;
 using Wpf.Ui.Controls;
 
 namespace Elogio;
@@ -39,9 +38,6 @@ public partial class MainWindow
 
         // Set up navigation service with the content frame
         _navigationService.SetFrame(ContentFrame);
-
-        // Initialize theme toggle state
-        ThemeToggle.IsChecked = ApplicationThemeManager.GetAppTheme() == ApplicationTheme.Dark;
 
         // Initialize Snackbar
         _snackbar = new Snackbar(SnackbarPresenter);
@@ -279,11 +275,6 @@ public partial class MainWindow
         NavigateToMain();
     }
 
-    private void MonthlyCalendarButton_Click(object sender, RoutedEventArgs e)
-    {
-        _navigationService.Navigate<MonthlyCalendarPage>();
-    }
-
     private void LogoutButton_Click(object sender, RoutedEventArgs e)
     {
         _kelioService.Logout();
@@ -403,22 +394,6 @@ public partial class MainWindow
         _snackbar.Icon = new SymbolIcon(SymbolRegular.ErrorCircle24);
         _snackbar.Timeout = TimeSpan.FromSeconds(5);
         _snackbar.Show();
-    }
-    
-    private void ThemeToggle_Checked(object sender, RoutedEventArgs e)
-    {
-        // Dark mode enabled
-        ApplicationThemeManager.Apply(ApplicationTheme.Dark);
-        ThemeIcon.Symbol = SymbolRegular.WeatherMoon24;
-        ThemeLabel.Text = "Dark Mode";
-    }
-    
-    private void ThemeToggle_Unchecked(object sender, RoutedEventArgs e)
-    {
-        // Light mode enabled
-        ApplicationThemeManager.Apply(ApplicationTheme.Light);
-        ThemeIcon.Symbol = SymbolRegular.WeatherSunny24;
-        ThemeLabel.Text = "Light Mode";
     }
 
     protected override void OnClosed(EventArgs e)

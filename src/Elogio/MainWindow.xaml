@@ -192,12 +192,11 @@
 
                         <!-- Navigation -->
                         <StackPanel Grid.Row="2" Margin="6,0">
-                            <ui:Button x:Name="MonthlyCalendarButton"
-                                       Content="Monthly Calendar"
+                            <ui:Button Content="Monthly Calendar"
                                        Appearance="Transparent"
                                        HorizontalAlignment="Stretch"
                                        HorizontalContentAlignment="Left"
-                                       Click="MonthlyCalendarButton_Click">
+                                       Command="{Binding NavigateToCalendarCommand}">
                                 <ui:Button.Icon>
                                     <ui:SymbolIcon Symbol="CalendarLtr24" />
                                 </ui:Button.Icon>
@@ -206,35 +205,11 @@
 
                         <!-- Footer -->
                         <StackPanel Grid.Row="3" Margin="6,0,6,12">
-                            <!-- Theme Toggle -->
-                            <Grid Margin="6,0,6,12">
-                                <Grid.ColumnDefinitions>
-                                    <ColumnDefinition Width="Auto" />
-                                    <ColumnDefinition Width="*" />
-                                    <ColumnDefinition Width="Auto" />
-                                </Grid.ColumnDefinitions>
-                                <ui:SymbolIcon Grid.Column="0" 
-                                               x:Name="ThemeIcon"
-                                               Symbol="WeatherMoon24" 
-                                               FontSize="18"
-                                               VerticalAlignment="Center" />
-                                <TextBlock Grid.Column="1" 
-                                           x:Name="ThemeLabel"
-                                           Text="Dark Mode" 
-                                           VerticalAlignment="Center"
-                                           Margin="8,0,0,0" />
-                                <ui:ToggleSwitch x:Name="ThemeToggle"
-                                              Grid.Column="2"
-                                              IsChecked="True"
-                                              Checked="ThemeToggle_Checked"
-                                              Unchecked="ThemeToggle_Unchecked" />
-                            </Grid>
-                            
                             <ui:Button Content="Settings"
                                        Appearance="Transparent"
                                        HorizontalAlignment="Stretch"
                                        HorizontalContentAlignment="Left"
-                                       IsEnabled="False">
+                                       Command="{Binding NavigateToSettingsCommand}">
                                 <ui:Button.Icon>
                                     <ui:SymbolIcon Symbol="Settings24" />
                                 </ui:Button.Icon>

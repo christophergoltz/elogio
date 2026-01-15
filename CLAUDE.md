@@ -192,6 +192,33 @@ HTTP traffic is logged to: `%LOCALAPPDATA%\Elogio\http_log.txt`
 
 ## Code Quality Standards
 
+### WPF / MVVM Pattern (CRITICAL)
+
+**ALWAYS follow the MVVM pattern for WPF development.**
+
+- **Views (XAML):** UI only, no business logic
+- **ViewModels:** All logic, state, and commands - use `CommunityToolkit.Mvvm`
+- **Code-behind (.xaml.cs):** Keep minimal - only use when absolutely necessary (e.g., setting DataContext via DI)
+
+**Rules:**
+- Use `[ObservableProperty]` for bindable properties
+- Use `[RelayCommand]` for commands
+- Use `Command="{Binding ...}"` instead of `Click="..."` event handlers
+- All UI updates via data binding, never directly manipulate UI elements from ViewModel
+- ViewModels receive dependencies via constructor injection
+
+**Example structure:**
+```
+ViewModels/
+├── MainViewModel.cs
+├── LoginViewModel.cs
+└── SettingsViewModel.cs
+Views/Pages/
+├── LoginPage.xaml          # UI only
+├── LoginPage.xaml.cs       # Minimal: just DataContext = viewModel
+└── SettingsPage.xaml
+```
+
 ### Clean Code Principles
 
 - **Readable:** Code should be self-documenting

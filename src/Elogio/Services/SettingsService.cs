@@ -64,7 +64,8 @@ public class SettingsService : ISettingsService
                 ServerUrl = settings.ServerUrl,
                 Username = settings.Username,
                 EncryptedPassword = settings.EncryptedPassword,
-                RememberCredentials = settings.RememberCredentials
+                RememberCredentials = settings.RememberCredentials,
+                IsDarkMode = settings.IsDarkMode
             };
 
             var json = JsonSerializer.Serialize(settingsToSave, new JsonSerializerOptions { WriteIndented = true });
@@ -97,6 +98,7 @@ public class UserSettings
     public string Username { get; set; } = "";
     public string? EncryptedPassword { get; set; }
     public bool RememberCredentials { get; set; } = true;
+    public bool IsDarkMode { get; set; } = true;
 
     // Not serialized - only used in memory
     public string? Password { get; set; }

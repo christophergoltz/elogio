@@ -5,6 +5,7 @@ using Elogio.ViewModels;
 using Elogio.Views.Pages;
 using Microsoft.Extensions.DependencyInjection;
 using Serilog;
+using Wpf.Ui.Appearance;
 
 namespace Elogio;
 
@@ -40,9 +41,10 @@ public partial class App
         ConfigureServices(services);
         _serviceProvider = services.BuildServiceProvider();
 
-        // Attempt auto-login if credentials are saved
+        // Load settings and apply saved theme
         var settingsService = Services.GetRequiredService<ISettingsService>();
         var settings = settingsService.Load();
+        ApplicationThemeManager.Apply(settings.IsDarkMode ? ApplicationTheme.Dark : ApplicationTheme.Light);
 
         MainWindow mainWindow;
 
@@ -117,10 +119,12 @@ public partial class App
         services.AddSingleton<MainViewModel>();
         services.AddTransient<LoginViewModel>();
         services.AddTransient<MonthlyCalendarViewModel>();
+        services.AddTransient<SettingsViewModel>();
 
         // Pages (Transient)
         services.AddTransient<LoginPage>();
         services.AddTransient<MonthlyCalendarPage>();
+        services.AddTransient<SettingsPage>();
 
         // Main Window (Singleton)
         services.AddSingleton<MainWindow>();
