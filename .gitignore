@@ -425,3 +425,9 @@ tools/python/decoded/
 docs/api_capture.har
 docs/api_discovery.json
 *.har
+
+# PyInstaller build artifacts
+src/Elogio.Persistence/Scripts/build/
+src/Elogio.Persistence/Scripts/dist/
+src/Elogio.Persistence/Scripts/*.spec
+src/Elogio.Persistence/tools/curl_proxy.exe
