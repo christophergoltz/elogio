@@ -2,6 +2,7 @@ using System.Diagnostics;
 using System.Text;
 using System.Text.Json;
 using System.Text.Json.Serialization;
+using Serilog;
 
 namespace Elogio.Persistence.Api;
 
@@ -304,6 +305,7 @@ public sealed class CurlImpersonateClient : IDisposable
         string arguments,
         CancellationToken cancellationToken)
     {
+        var totalSw = Stopwatch.StartNew();
         string fileName;
         string processArgs;
 
@@ -330,15 +332,25 @@ public sealed class CurlImpersonateClient : IDisposable
         process.StartInfo.StandardOutputEncoding = Encoding.UTF8;
         process.StartInfo.StandardErrorEncoding = Encoding.UTF8;
 
+        var startSw = Stopwatch.StartNew();
         process.Start();
+        var processStartMs = startSw.ElapsedMilliseconds;
 
         var stdoutTask = process.StandardOutput.ReadToEndAsync(cancellationToken);
         var stderrTask = process.StandardError.ReadToEndAsync(cancellationToken);
 
         await process.WaitForExitAsync(cancellationToken);
+        var processExecMs = startSw.ElapsedMilliseconds;
 
         var stdout = await stdoutTask;
         var stderr = await stderrTask;
+
+        totalSw.Stop();
+
+        // Log process overhead separately from total request time
+        Log.Debug("[PERF] CurlProxy: Process start={StartMs}ms, exec={ExecMs}ms, total={TotalMs}ms, mode={Mode}",
+            processStartMs, processExecMs, totalSw.ElapsedMilliseconds,
+            _useStandaloneExe ? "exe" : "python");
 
         return (process.ExitCode, stdout, stderr);
     }

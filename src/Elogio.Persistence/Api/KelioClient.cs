@@ -1,9 +1,11 @@
+using System.Diagnostics;
 using System.Net;
 using System.Text;
 using System.Text.RegularExpressions;
 using Elogio.Persistence.Dto;
 using Elogio.Persistence.Protocol;
 using Refit;
+using Serilog;
 
 namespace Elogio.Persistence.Api;
 
@@ -127,11 +129,14 @@ public partial class KelioClient : IDisposable
     /// </summary>
     public async Task<bool> LoginAsync(string username, string password)
     {
+        var totalSw = Stopwatch.StartNew();
         try
         {
             // 1. Get login page for CSRF token via curl_cffi (Chrome TLS fingerprint)
             await LogDebugAsync("[curl_cffi] Getting login page...");
+            var sw = Stopwatch.StartNew();
             var loginPageResponse = await _curlClient.GetAsync($"{_baseUrl}/open/login");
+            Log.Information("[PERF] LoginAsync: GetLoginPage took {ElapsedMs}ms", sw.ElapsedMilliseconds);
 
             if (!loginPageResponse.IsSuccessStatusCode && loginPageResponse.StatusCode != 401)
             {
@@ -163,9 +168,11 @@ public partial class KelioClient : IDisposable
 
             await LogDebugAsync($"[curl_cffi] Posting login with body: {loginBody[..Math.Min(100, loginBody.Length)]}...");
             await LogDebugAsync($"[curl_cffi] Using cookie: {_sessionCookie}");
+            sw.Restart();
             var loginResponse = await _curlClient.PostAsync(
                 $"{_baseUrl}/open/j_spring_security_check",
                 loginBody, loginHeaders, _sessionCookie);
+            Log.Information("[PERF] LoginAsync: PostLogin took {ElapsedMs}ms", sw.ElapsedMilliseconds);
 
             await LogDebugAsync($"[curl_cffi] Login response status: {loginResponse.StatusCode}");
             await LogDebugAsync($"[curl_cffi] Login response body (first 500): {loginResponse.Body[..Math.Min(500, loginResponse.Body.Length)]}");
@@ -192,7 +199,9 @@ public partial class KelioClient : IDisposable
             if (_isAuthenticated)
             {
                 // Get the session ID from portail.jsp (server-provided)
+                sw.Restart();
                 _sessionId = await GetSessionIdFromPortalViaCurlAsync();
+                Log.Information("[PERF] LoginAsync: GetSessionIdFromPortal took {ElapsedMs}ms", sw.ElapsedMilliseconds);
 
                 if (string.IsNullOrEmpty(_sessionId))
                 {
@@ -200,19 +209,29 @@ public partial class KelioClient : IDisposable
                 }
 
                 // Initialize BWP session with connect call
+                sw.Restart();
                 await ConnectBwpSessionAsync();
+                Log.Information("[PERF] LoginAsync: ConnectBwpSession took {ElapsedMs}ms", sw.ElapsedMilliseconds);
 
                 // Push connect via curl_cffi
+                sw.Restart();
                 await ConnectPushViaCurlAsync();
+                Log.Information("[PERF] LoginAsync: ConnectPush took {ElapsedMs}ms", sw.ElapsedMilliseconds);
 
                 // Call getHeureServeur to complete initialization
+                sw.Restart();
                 await InitializeServerStateAsync();
+                Log.Information("[PERF] LoginAsync: InitializeServerState took {ElapsedMs}ms", sw.ElapsedMilliseconds);
             }
 
+            totalSw.Stop();
+            Log.Information("[PERF] LoginAsync: TOTAL LOGIN TIME {ElapsedMs}ms", totalSw.ElapsedMilliseconds);
             return _isAuthenticated;
         }
         catch (Exception)
         {
+            totalSw.Stop();
+            Log.Warning("[PERF] LoginAsync: FAILED after {ElapsedMs}ms", totalSw.ElapsedMilliseconds);
             _isAuthenticated = false;
             throw;
         }
@@ -367,6 +386,7 @@ public partial class KelioClient : IDisposable
     /// </summary>
     private async Task InitializeServerStateAsync()
     {
+        var totalSw = Stopwatch.StartNew();
         if (string.IsNullOrEmpty(_sessionId))
             return;
 
@@ -374,9 +394,11 @@ public partial class KelioClient : IDisposable
         try
         {
             await LogDebugAsync($"InitializeServerState - launching declaration app");
+            var sw = Stopwatch.StartNew();
             var appLaunchResponse = await _curlClient.GetAsync(
                 $"{_baseUrl}/open/bwt/appLauncher.jsp?app=app_declaration_desktop&appParams=idMenuDeclaration=1",
                 cookies: _sessionCookie);
+            Log.Information("[PERF] InitializeServerState: AppLauncherJsp took {ElapsedMs}ms", sw.ElapsedMilliseconds);
             await LogDebugAsync($"InitializeServerState - appLauncher status: {appLaunchResponse.StatusCode}");
 
             // Update session cookie if the server returned a new one
@@ -387,13 +409,18 @@ public partial class KelioClient : IDisposable
                 _sessionCookie = newCookie;
             }
 
-            // Load declaration app GWT files
+            // Load declaration app GWT files - SEQUENTIAL (potential optimization: parallel)
+            sw.Restart();
             await _curlClient.GetAsync(
                 $"{_baseUrl}/open/bwt/app_declaration_desktop/app_declaration_desktop.nocache.js",
                 cookies: _sessionCookie);
+            Log.Information("[PERF] InitializeServerState: GWT nocache.js took {ElapsedMs}ms", sw.ElapsedMilliseconds);
+
+            sw.Restart();
             await _curlClient.GetAsync(
                 $"{_baseUrl}/open/bwt/app_declaration_desktop/1A313ED29AA1E74DD777D2CCF3248188.cache.js",
                 cookies: _sessionCookie);
+            Log.Information("[PERF] InitializeServerState: GWT cache.js took {ElapsedMs}ms", sw.ElapsedMilliseconds);
         }
         catch (Exception ex)
         {
@@ -403,7 +430,9 @@ public partial class KelioClient : IDisposable
         // GlobalBWTService connect - CRITICAL: This returns the dynamic employee ID!
         try
         {
+            var sw = Stopwatch.StartNew();
             await GlobalBwtServiceConnectAsync();
+            Log.Information("[PERF] InitializeServerState: GlobalBwtServiceConnect took {ElapsedMs}ms", sw.ElapsedMilliseconds);
         }
         catch (Exception ex)
         {
@@ -412,7 +441,11 @@ public partial class KelioClient : IDisposable
 
         // Load translations - browser does this before calling getSemaine
         // This may initialize server-side state for the presence module
+        var transSw = Stopwatch.StartNew();
         await LoadTranslationsAsync();
+        Log.Information("[PERF] InitializeServerState: LoadTranslations took {ElapsedMs}ms", transSw.ElapsedMilliseconds);
+
+        Log.Information("[PERF] InitializeServerState: TOTAL {ElapsedMs}ms", totalSw.ElapsedMilliseconds);
     }
 
     /// <summary>
@@ -637,12 +670,14 @@ public partial class KelioClient : IDisposable
     /// <summary>
     /// Initialize the calendar/absence app before making absence-related API calls.
     /// Based on HAR capture analysis: load the intranet_calendrier_absence.jsp page and GWT files.
+    /// NOTE: Currently 8 SEQUENTIAL steps - major performance bottleneck!
     /// </summary>
     private async Task InitializeCalendarAppAsync()
     {
         if (_calendarAppInitialized)
             return;
 
+        var totalSw = Stopwatch.StartNew();
         try
         {
             await LogDebugAsync("InitializeCalendarApp - starting initialization");
@@ -651,10 +686,12 @@ public partial class KelioClient : IDisposable
             // The browser navigates to homepage?ACTION=intranet before the calendar JSP
             try
             {
+                var sw = Stopwatch.StartNew();
                 await LogDebugAsync("InitializeCalendarApp - navigating to intranet section");
                 var intranetResponse = await _curlClient.GetAsync(
                     $"{_baseUrl}/open/homepage?ACTION=intranet&asked=6&header=0",
                     cookies: _sessionCookie);
+                Log.Information("[PERF] InitCalendarApp Step0: Navigate to intranet took {ElapsedMs}ms", sw.ElapsedMilliseconds);
                 await LogDebugAsync($"InitializeCalendarApp - intranet navigation status: {intranetResponse.StatusCode}");
 
                 var newCookie = ExtractSessionCookie(intranetResponse.Headers);
@@ -673,10 +710,12 @@ public partial class KelioClient : IDisposable
             // This sets up the server-side session state for the calendar module
             try
             {
+                var sw = Stopwatch.StartNew();
                 await LogDebugAsync("InitializeCalendarApp - loading intranet_calendrier_absence.jsp");
                 var jspResponse = await _curlClient.GetAsync(
                     $"{_baseUrl}/open/bwt/intranet_calendrier_absence.jsp",
                     cookies: _sessionCookie);
+                Log.Information("[PERF] InitCalendarApp Step1: Load JSP took {ElapsedMs}ms", sw.ElapsedMilliseconds);
                 await LogDebugAsync($"InitializeCalendarApp - JSP page status: {jspResponse.StatusCode}");
 
                 var newCookie = ExtractSessionCookie(jspResponse.Headers);
@@ -694,10 +733,12 @@ public partial class KelioClient : IDisposable
             // Step 2: Load the GWT nocache.js file
             try
             {
+                var sw = Stopwatch.StartNew();
                 await LogDebugAsync("InitializeCalendarApp - loading GWT nocache.js");
                 await _curlClient.GetAsync(
                     $"{_baseUrl}/open/bwt/intranet_calendrier_absence/intranet_calendrier_absence.nocache.js",
                     cookies: _sessionCookie);
+                Log.Information("[PERF] InitCalendarApp Step2: Load nocache.js took {ElapsedMs}ms", sw.ElapsedMilliseconds);
                 await LogDebugAsync("InitializeCalendarApp - loaded nocache.js");
             }
             catch (Exception ex)
@@ -708,10 +749,12 @@ public partial class KelioClient : IDisposable
             // Step 3: Load the GWT cache.js file (hash from HAR capture)
             try
             {
+                var sw = Stopwatch.StartNew();
                 await LogDebugAsync("InitializeCalendarApp - loading GWT cache.js");
                 await _curlClient.GetAsync(
                     $"{_baseUrl}/open/bwt/intranet_calendrier_absence/B774D9023F6AE5125A0446A2F6C1BC19.cache.js",
                     cookies: _sessionCookie);
+                Log.Information("[PERF] InitCalendarApp Step3: Load cache.js took {ElapsedMs}ms", sw.ElapsedMilliseconds);
                 await LogDebugAsync("InitializeCalendarApp - loaded cache.js");
             }
             catch (Exception ex)
@@ -723,8 +766,10 @@ public partial class KelioClient : IDisposable
             // This activates the calendar module for the session (uses Short=16 vs 21 for portal)
             try
             {
+                var sw = Stopwatch.StartNew();
                 await LogDebugAsync("InitializeCalendarApp - making GlobalBWTService connect for calendar");
                 await CalendarGlobalConnectAsync();
+                Log.Information("[PERF] InitCalendarApp Step4: CalendarGlobalConnect took {ElapsedMs}ms", sw.ElapsedMilliseconds);
                 await LogDebugAsync("InitializeCalendarApp - GlobalBWTService connect complete");
             }
             catch (Exception ex)
@@ -736,8 +781,10 @@ public partial class KelioClient : IDisposable
             // HAR shows this is called before the calendar-specific presentation model
             try
             {
+                var sw = Stopwatch.StartNew();
                 await LogDebugAsync("InitializeCalendarApp - calling getPresentationModel for GlobalPresentationModel");
                 await CalendarGetGlobalPresentationModelAsync();
+                Log.Information("[PERF] InitCalendarApp Step5: GetGlobalPresentationModel took {ElapsedMs}ms", sw.ElapsedMilliseconds);
                 await LogDebugAsync("InitializeCalendarApp - GlobalPresentationModel complete");
             }
             catch (Exception ex)
@@ -749,8 +796,10 @@ public partial class KelioClient : IDisposable
             // HAR shows this is called after GlobalPresentationModel, before translations
             try
             {
+                var sw = Stopwatch.StartNew();
                 await LogDebugAsync("InitializeCalendarApp - calling getParametreIntranet");
                 await CalendarGetParametreIntranetAsync();
+                Log.Information("[PERF] InitCalendarApp Step6: GetParametreIntranet took {ElapsedMs}ms", sw.ElapsedMilliseconds);
                 await LogDebugAsync("InitializeCalendarApp - getParametreIntranet complete");
             }
             catch (Exception ex)
@@ -762,8 +811,10 @@ public partial class KelioClient : IDisposable
             // HAR capture shows browser loads "calendrier.annuel.intranet_" translations before absence request
             try
             {
+                var sw = Stopwatch.StartNew();
                 await LogDebugAsync("InitializeCalendarApp - loading calendar translations");
                 await LoadCalendarTranslationsAsync();
+                Log.Information("[PERF] InitCalendarApp Step7: LoadCalendarTranslations took {ElapsedMs}ms", sw.ElapsedMilliseconds);
                 await LogDebugAsync("InitializeCalendarApp - calendar translations loaded");
             }
             catch (Exception ex)
@@ -776,8 +827,10 @@ public partial class KelioClient : IDisposable
             // This initializes the server-side state for the calendar module.
             try
             {
+                var sw = Stopwatch.StartNew();
                 await LogDebugAsync("InitializeCalendarApp - calling getPresentationModel for CalendrierAbsencePresentationModel");
                 await CalendarGetPresentationModelAsync();
+                Log.Information("[PERF] InitCalendarApp Step8: GetPresentationModel took {ElapsedMs}ms", sw.ElapsedMilliseconds);
                 await LogDebugAsync("InitializeCalendarApp - CalendrierAbsencePresentationModel complete");
             }
             catch (Exception ex)
@@ -786,10 +839,12 @@ public partial class KelioClient : IDisposable
             }
 
             _calendarAppInitialized = true;
+            Log.Information("[PERF] InitCalendarApp: TOTAL {ElapsedMs}ms (8 sequential steps)", totalSw.ElapsedMilliseconds);
             await LogDebugAsync("InitializeCalendarApp - complete");
         }
         catch (Exception ex)
         {
+            Log.Warning("[PERF] InitCalendarApp: FAILED after {ElapsedMs}ms", totalSw.ElapsedMilliseconds);
             await LogDebugAsync($"InitializeCalendarApp - warning: {ex.Message}");
             _calendarAppInitialized = true;
         }
@@ -799,6 +854,7 @@ public partial class KelioClient : IDisposable
     /// Load translations that the browser loads before calling getSemaine.
     /// This may be required to initialize server-side state.
     /// Uses the dynamic employee ID extracted from GlobalBWTService connect.
+    /// OPTIMIZED: Runs all translation requests in parallel using Task.WhenAll.
     /// </summary>
     private async Task LoadTranslationsAsync()
     {
@@ -810,21 +866,36 @@ public partial class KelioClient : IDisposable
             "app.portail.declaration.presence_"
         };
 
-        foreach (var prefix in prefixes)
+        var totalSw = Stopwatch.StartNew();
+
+        // Run all translation requests in parallel
+        var tasks = prefixes.Select(async prefix =>
         {
+            var sw = Stopwatch.StartNew();
             try
             {
                 await LogDebugAsync($"LoadTranslations - loading {prefix} with employeeId={_employeeId}");
                 var gwtRequest = _requestBuilder.BuildGetTraductionsRequest(_sessionId!, prefix, _employeeId);
                 var response = await SendGwtRequestInternalAsync(gwtRequest);
                 var hasException = response.Contains("ExceptionBWT");
+                Log.Information("[PERF] LoadTranslations: '{Prefix}' took {ElapsedMs}ms", prefix, sw.ElapsedMilliseconds);
                 await LogDebugAsync($"LoadTranslations - {prefix} response: exception={hasException}, length={response.Length}");
+                return (prefix, success: !hasException);
             }
             catch (Exception ex)
             {
+                Log.Warning("[PERF] LoadTranslations: '{Prefix}' failed after {ElapsedMs}ms: {Error}",
+                    prefix, sw.ElapsedMilliseconds, ex.Message);
                 await LogDebugAsync($"LoadTranslations - {prefix} warning: {ex.Message}");
+                return (prefix, success: false);
             }
-        }
+        }).ToList();
+
+        var results = await Task.WhenAll(tasks);
+        var successCount = results.Count(r => r.success);
+
+        Log.Information("[PERF] LoadTranslations: PARALLEL - TOTAL {ElapsedMs}ms ({SuccessCount}/{TotalCount} succeeded)",
+            totalSw.ElapsedMilliseconds, successCount, prefixes.Length);
     }
 
     /// <summary>

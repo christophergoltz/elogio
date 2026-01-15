@@ -1,3 +1,4 @@
+using System.Diagnostics;
 using Elogio.Persistence.Api;
 using Elogio.Persistence.Dto;
 using Serilog;
@@ -24,19 +25,26 @@ public class KelioService : IKelioService, IDisposable
 
     public async Task<bool> LoginAsync(string serverUrl, string username, string password)
     {
+        var totalSw = Stopwatch.StartNew();
+
         // Dispose previous client if exists
         _client?.Dispose();
 
         _client = new KelioClient(serverUrl);
+        var sw = Stopwatch.StartNew();
         var success = await _client.LoginAsync(username, password);
+        Log.Information("[PERF] KelioService.LoginAsync: KelioClient.LoginAsync took {ElapsedMs}ms", sw.ElapsedMilliseconds);
 
         if (success)
         {
             // Try to get employee name from first week data
+            sw.Restart();
             var weekData = await _client.GetCurrentWeekPresenceAsync();
+            Log.Information("[PERF] KelioService.LoginAsync: GetCurrentWeekPresence took {ElapsedMs}ms", sw.ElapsedMilliseconds);
             _employeeName = weekData?.EmployeeName;
         }
 
+        Log.Information("[PERF] KelioService.LoginAsync: TOTAL {ElapsedMs}ms", totalSw.ElapsedMilliseconds);
         return success;
     }
 
@@ -212,6 +220,7 @@ public class KelioService : IKelioService, IDisposable
 
     private async Task<MonthData> FetchMonthDataInternalAsync(int year, int month)
     {
+        var totalSw = Stopwatch.StartNew();
         var weeks = GetWeeksInMonth(year, month);
         Log.Information("FetchMonthDataInternalAsync: Fetching {WeekCount} weeks for {Year}-{Month}: {WeekStarts}",
             weeks.Count, year, month, string.Join(", ", weeks.Select(w => w.ToString("yyyy-MM-dd"))));
@@ -222,23 +231,35 @@ public class KelioService : IKelioService, IDisposable
         var failedWeeks = 0;
 
         // Fetch weeks with limited parallelism (2 at a time) to avoid overwhelming the API
-        var semaphore = new SemaphoreSlim(2);
+        // NOTE: This limit may be too conservative - consider increasing to 4-5
+        const int maxParallel = 2;
+        var semaphore = new SemaphoreSlim(maxParallel);
+        Log.Information("[PERF] FetchMonthData: Starting {WeekCount} weeks with parallelism={MaxParallel}", weeks.Count, maxParallel);
+
         var weekTasks = weeks.Select(async weekStart =>
         {
+            var waitSw = Stopwatch.StartNew();
             await semaphore.WaitAsync();
+            var waitMs = waitSw.ElapsedMilliseconds;
+
             try
             {
+                var fetchSw = Stopwatch.StartNew();
                 Log.Debug("Fetching week starting {WeekStart}", weekStart);
                 var result = await _client!.GetWeekPresenceAsync(weekStart);
+                var fetchMs = fetchSw.ElapsedMilliseconds;
+
                 if (result != null)
                 {
+                    Log.Information("[PERF] FetchMonthData: Week {WeekStart} took {FetchMs}ms (waited {WaitMs}ms for semaphore)",
+                        weekStart.ToString("yyyy-MM-dd"), fetchMs, waitMs);
                     Log.Information("Fetched week {WeekStart}: {DayCount} days, dates: {Dates}",
                         weekStart, result.Days.Count,
                         string.Join(", ", result.Days.Select(d => d.Date.ToString("MM-dd"))));
                 }
                 else
                 {
-                    Log.Warning("Fetched week {WeekStart}: returned NULL", weekStart);
+                    Log.Warning("Fetched week {WeekStart}: returned NULL after {FetchMs}ms", weekStart, fetchMs);
                 }
                 return (weekStart, result);
             }
@@ -254,6 +275,7 @@ public class KelioService : IKelioService, IDisposable
         }).ToList();
 
         var weekResults = await Task.WhenAll(weekTasks);
+        Log.Information("[PERF] FetchMonthData: All {WeekCount} weeks completed in {ElapsedMs}ms", weeks.Count, totalSw.ElapsedMilliseconds);
         Log.Information("FetchMonthDataInternalAsync: Got {ResultCount} week results", weekResults.Length);
 
         foreach (var (weekStart, weekData) in weekResults)
