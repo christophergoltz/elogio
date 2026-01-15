@@ -1,5 +1,13 @@
 # Changelog
 
+## [0.1.5](https://github.com/christophergoltz/elogio/compare/v0.1.4...v0.1.5) (2026-01-15)
+
+
+### Features
+
+* **settings:** add settings page with theme persistence and fix punch error display ([#11](https://github.com/christophergoltz/elogio/issues/11)) ([70e6070](https://github.com/christophergoltz/elogio/commit/70e6070d5162fcdbb23b7ab6559615b09d347a10))
+* **ui:** add update status indicator to title bar ([#13](https://github.com/christophergoltz/elogio/issues/13)) ([98a1934](https://github.com/christophergoltz/elogio/commit/98a1934ce53e5c582f1b93d44cd107526027b481))
+
 ## [0.1.4](https://github.com/christophergoltz/elogio/compare/v0.1.3...v0.1.4) (2026-01-15)
 
 
