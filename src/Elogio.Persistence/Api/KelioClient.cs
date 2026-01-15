@@ -610,10 +610,15 @@ public partial class KelioClient : IDisposable
                     // So employee ID is at i-2 (loop guarantees i >= 2)
                     if (int.TryParse(dataTokens[i - 1], out var typeRef) && typeRef == 4 &&
                         int.TryParse(dataTokens[i - 2], out var employeeId) &&
-                        employeeId >= 100 && employeeId <= 9999)
+                        employeeId > 0 && employeeId <= 99999)
                     {
                         _ = LogDebugAsync($"ExtractEmployeeId: Found employee ID {employeeId} before name pattern at pos {i-2}");
                         return employeeId;
+                    }
+                    else
+                    {
+                        // Log why it failed for debugging
+                        _ = LogDebugAsync($"ExtractEmployeeId: Pattern found but validation failed. i-1={dataTokens[i-1]}, i-2={dataTokens[i-2]}");
                     }
                 }
             }

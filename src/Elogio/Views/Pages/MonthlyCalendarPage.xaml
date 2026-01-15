@@ -20,6 +20,23 @@
             <Setter Property="Margin" Value="2" />
             <Setter Property="Padding" Value="4" />
         </Style>
+
+        <!-- Diagonal stripe pattern for half holidays -->
+        <DrawingBrush x:Key="HalfHolidayStripeBrush"
+                      TileMode="Tile"
+                      Viewport="0,0,8,8"
+                      ViewportUnits="Absolute">
+            <DrawingBrush.Drawing>
+                <GeometryDrawing>
+                    <GeometryDrawing.Pen>
+                        <Pen Brush="#40808080" Thickness="4" />
+                    </GeometryDrawing.Pen>
+                    <GeometryDrawing.Geometry>
+                        <LineGeometry StartPoint="0,8" EndPoint="8,0" />
+                    </GeometryDrawing.Geometry>
+                </GeometryDrawing>
+            </DrawingBrush.Drawing>
+        </DrawingBrush>
     </Page.Resources>
 
     <Grid Margin="24,24,24,8">
@@ -140,9 +157,9 @@
                                         <DataTrigger Binding="{Binding AbsenceType}" Value="{x:Static dto:AbsenceType.SickLeave}">
                                             <Setter Property="Background" Value="{ui:ThemeResource ControlFillColorSecondaryBrush}" />
                                         </DataTrigger>
-                                        <!-- Half holiday gets yellow tint -->
+                                        <!-- Half holiday gets diagonal stripe pattern -->
                                         <DataTrigger Binding="{Binding AbsenceType}" Value="{x:Static dto:AbsenceType.HalfHoliday}">
-                                            <Setter Property="Background" Value="#33FFEB3B" />
+                                            <Setter Property="Background" Value="{StaticResource HalfHolidayStripeBrush}" />
                                         </DataTrigger>
                                         <DataTrigger Binding="{Binding State}" Value="{x:Static vm:DayCellState.MissingEntry}">
                                             <Setter Property="Background" Value="#33F44336" />
@@ -152,14 +169,6 @@
                             </Border.Style>
 
                                 <Grid>
-                                    <!-- Half-holiday indicator in top-right corner -->
-                                    <Ellipse Width="8" Height="8"
-                                             Fill="#FFEB3B"
-                                             HorizontalAlignment="Right"
-                                             VerticalAlignment="Top"
-                                             Margin="0,-2,-2,0"
-                                             Visibility="{Binding IsHalfHolidayCombined, Converter={StaticResource BoolToVisibilityConverter}}"
-                                             ToolTip="Halber Feiertag" />
 
                                 <Grid VerticalAlignment="Center">
                                     <Grid.RowDefinitions>

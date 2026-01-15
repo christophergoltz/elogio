@@ -149,10 +149,13 @@ public class KelioService : IKelioService, IDisposable
 
         try
         {
-            var startDate = new DateOnly(year, month, 1);
-            var endDate = startDate.AddMonths(1).AddDays(-1);
+            // Extend date range to include visible days from adjacent months in the calendar grid
+            // Add 7 days before and after to cover leading/trailing days in the grid
+            var startDate = new DateOnly(year, month, 1).AddDays(-7);
+            var endDate = new DateOnly(year, month, 1).AddMonths(1).AddDays(13);
 
-            Log.Information("GetMonthAbsencesAsync: Fetching absences for {StartDate} to {EndDate}", startDate, endDate);
+            Log.Information("GetMonthAbsencesAsync: Fetching absences for {StartDate} to {EndDate} (month {Year}-{Month})",
+                startDate, endDate, year, month);
 
             var data = await _client.GetAbsencesAsync(startDate, endDate);
 
@@ -188,8 +191,9 @@ public class KelioService : IKelioService, IDisposable
             {
                 try
                 {
-                    var startDate = new DateOnly(prevYear, prevMonth, 1);
-                    var endDate = startDate.AddMonths(1).AddDays(-1);
+                    // Use same extended date range logic as GetMonthAbsencesAsync
+                    var startDate = new DateOnly(prevYear, prevMonth, 1).AddDays(-7);
+                    var endDate = new DateOnly(prevYear, prevMonth, 1).AddMonths(1).AddDays(13);
 
                     var data = await _client.GetAbsencesAsync(startDate, endDate);
                     if (data != null)

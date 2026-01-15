@@ -461,16 +461,18 @@ public partial class DayCellViewModel : ObservableObject
 
     /// <summary>
     /// Whether this day has an absence that should display a label.
-    /// Excludes None, weekends, public holidays (shown via background), and unknown.
-    /// </summary>
-    /// <summary>
-    /// Whether this day has an absence that should display a label.
     /// Excludes None, weekends, and unknown types.
     /// </summary>
     public bool HasDisplayableAbsence =>
         AbsenceType != AbsenceType.None &&
         AbsenceType != AbsenceType.Weekend &&
         AbsenceType != AbsenceType.Unknown;
+
+    /// <summary>
+    /// Whether this is a full-day absence where no work is expected.
+    /// </summary>
+    public bool IsFullDayAbsence =>
+        AbsenceType is AbsenceType.Vacation or AbsenceType.SickLeave or AbsenceType.PublicHoliday;
 
     /// <summary>
     /// Simple worked time display (e.g., "7:30" or "--").
@@ -485,7 +487,7 @@ public partial class DayCellViewModel : ObservableObject
         get
         {
             if (!IsCurrentMonth || IsFuture) return "";
-            if (IsWeekend || ExpectedTime == TimeSpan.Zero) return "--";
+            if (IsWeekend || IsFullDayAbsence || ExpectedTime == TimeSpan.Zero) return "--";
             if (WorkedTime == TimeSpan.Zero) return "--";
             return FormatTime(WorkedTime);
         }
@@ -499,7 +501,7 @@ public partial class DayCellViewModel : ObservableObject
         get
         {
             if (!IsCurrentMonth || IsFuture) return "";
-            if (IsWeekend || ExpectedTime == TimeSpan.Zero) return "";
+            if (IsWeekend || IsFullDayAbsence || ExpectedTime == TimeSpan.Zero) return "";
             return $"/ {FormatTime(ExpectedTime)}";
         }
     }
@@ -512,7 +514,7 @@ public partial class DayCellViewModel : ObservableObject
         get
         {
             if (!IsCurrentMonth || IsFuture) return "";
-            if (IsWeekend || ExpectedTime == TimeSpan.Zero) return "--";
+            if (IsWeekend || IsFullDayAbsence || ExpectedTime == TimeSpan.Zero) return "--";
             if (WorkedTime == TimeSpan.Zero && ExpectedTime > TimeSpan.Zero)
                 return $"-- / {FormatTime(ExpectedTime)}";
 

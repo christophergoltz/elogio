@@ -200,6 +200,46 @@ public class AbsenceIntegrationTests
     }
 
     [Fact]
+    public async Task Debug_December24_2025_CheckCombinedAbsence()
+    {
+        using var client = new KelioClient(_serverUrl);
+
+        var loginResult = await client.LoginAsync(_username, _password);
+        Assert.True(loginResult, "Login should succeed");
+
+        var absences = await client.GetAbsencesAsync(
+            new DateOnly(2025, 12, 1),
+            new DateOnly(2025, 12, 31));
+
+        Assert.NotNull(absences);
+
+        _output.WriteLine("=== December 2025 Absences ===");
+        foreach (var day in absences.Days.Where(d => d.Type != AbsenceType.None && d.Type != AbsenceType.Weekend))
+        {
+            _output.WriteLine($"{day.Date:dd.MM.yyyy}: Type={day.Type}, IsHalfHoliday={day.IsHalfHoliday}, IsPublicHoliday={day.IsPublicHoliday}, Label={day.Label}");
+        }
+
+        // Specifically check Dec 24
+        var dec24 = absences.Days.FirstOrDefault(d => d.Date == new DateOnly(2025, 12, 24));
+        _output.WriteLine($"\n=== December 24 Details ===");
+        if (dec24 != null)
+        {
+            _output.WriteLine($"Type: {dec24.Type}");
+            _output.WriteLine($"IsHalfHoliday: {dec24.IsHalfHoliday}");
+            _output.WriteLine($"IsPublicHoliday: {dec24.IsPublicHoliday}");
+            _output.WriteLine($"IsWeekend: {dec24.IsWeekend}");
+            _output.WriteLine($"IsRestDay: {dec24.IsRestDay}");
+            _output.WriteLine($"Label: {dec24.Label}");
+            _output.WriteLine($"ColorValue: {dec24.ColorValue}");
+            _output.WriteLine($"MotifId: {dec24.MotifId}");
+        }
+        else
+        {
+            _output.WriteLine("Dec 24 not found in absences!");
+        }
+    }
+
+    [Fact]
     public async Task GetAbsences_SummaryStatistics_ShouldCalculateCorrectly()
     {
         using var client = new KelioClient(_serverUrl);
