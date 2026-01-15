@@ -46,6 +46,18 @@ public partial class MainWindow
 
         // Subscribe to update available event for the banner display
         _updateService.UpdateAvailable += OnUpdateAvailable;
+
+        // Start update checks when window is ready
+        ContentRendered += OnContentRendered;
+    }
+
+    private async void OnContentRendered(object? sender, EventArgs e)
+    {
+        // Unsubscribe to only run once
+        ContentRendered -= OnContentRendered;
+
+        // Start initial and periodic update checks
+        await _viewModel.StartUpdateChecksAsync();
     }
     
     /// <summary>
@@ -104,17 +116,6 @@ public partial class MainWindow
 
         // Load today's balance and determine initial punch state
         _ = UpdateTodayBalanceAsync();
-
-        // Check for updates in background (non-blocking)
-        _ = CheckForUpdatesAsync();
-    }
-
-    /// <summary>
-    /// Check for application updates in background via the ViewModel.
-    /// </summary>
-    private async Task CheckForUpdatesAsync()
-    {
-        await _viewModel.CheckForUpdatesAsync();
     }
 
     /// <summary>
@@ -126,6 +127,9 @@ public partial class MainWindow
         {
             UpdateVersionText.Text = $"Version {updateInfo.Version} is available";
             UpdateBanner.Visibility = Visibility.Visible;
+
+            // Add margin to MainLayout so banner doesn't overlap content
+            MainLayout.Margin = new Thickness(0, 54, 0, 0);
         });
     }
 
@@ -156,6 +160,9 @@ public partial class MainWindow
     private void DismissUpdateButton_Click(object sender, RoutedEventArgs e)
     {
         UpdateBanner.Visibility = Visibility.Collapsed;
+
+        // Remove margin from MainLayout
+        MainLayout.Margin = new Thickness(0);
     }
 
     /// <summary>
@@ -393,6 +400,8 @@ public partial class MainWindow
 
     protected override void OnClosed(EventArgs e)
     {
+        _viewModel.Dispose();
+
         if (_kelioService is IDisposable disposable)
         {
             disposable.Dispose();
