@@ -21,9 +21,34 @@
 
         <!-- Title Bar -->
         <ui:TitleBar Grid.Row="0"
-                     Title="{Binding Title}"
                      ShowMaximize="True"
-                     ShowMinimize="True" />
+                     ShowMinimize="True">
+            <ui:TitleBar.Header>
+                <StackPanel Orientation="Horizontal" VerticalAlignment="Center">
+                    <Label Content="{Binding Title}" Margin="16,0,0,0" VerticalAlignment="Center"></Label>
+                    
+                    <!-- Update Status Box -->
+                    <Border CornerRadius="4"
+                            Padding="8,2"
+                            Margin="8,0,0,0"
+                            VerticalAlignment="Center"
+                            Background="{Binding UpdateStatusBrush}"
+                            Visibility="{Binding IsUpdateStatusVisible, Converter={StaticResource BoolToVisibilityConverter}}">
+                        <StackPanel Orientation="Horizontal">
+                            <ui:SymbolIcon Symbol="{Binding UpdateStatusIcon}"
+                                           FontSize="14"
+                                           Foreground="White"
+                                           VerticalAlignment="Center" />
+                            <TextBlock Text="{Binding UpdateStatusText}"
+                                       Foreground="White"
+                                       FontSize="12"
+                                       VerticalAlignment="Center"
+                                       Margin="6,0,0,0" />
+                        </StackPanel>
+                    </Border>
+                </StackPanel>
+            </ui:TitleBar.Header>
+        </ui:TitleBar>
 
         <!-- Main Content Area -->
         <Grid Grid.Row="1">
@@ -36,26 +61,26 @@
                     Padding="16,10">
                 <Grid>
                     <Grid.ColumnDefinitions>
-                        <ColumnDefinition Width="Auto"/>
-                        <ColumnDefinition Width="*"/>
-                        <ColumnDefinition Width="Auto"/>
-                        <ColumnDefinition Width="Auto"/>
+                        <ColumnDefinition Width="Auto" />
+                        <ColumnDefinition Width="*" />
+                        <ColumnDefinition Width="Auto" />
+                        <ColumnDefinition Width="Auto" />
                     </Grid.ColumnDefinitions>
 
                     <ui:SymbolIcon Grid.Column="0"
                                    Symbol="ArrowDownload24"
                                    FontSize="20"
                                    Margin="0,0,12,0"
-                                   VerticalAlignment="Center"/>
+                                   VerticalAlignment="Center" />
 
                     <StackPanel Grid.Column="1" VerticalAlignment="Center">
                         <TextBlock x:Name="UpdateVersionText"
                                    Text="A new version is available"
-                                   FontWeight="SemiBold"/>
+                                   FontWeight="SemiBold" />
                         <TextBlock x:Name="UpdateDetailsText"
                                    Text="Click 'Install Now' to update and restart"
                                    FontSize="12"
-                                   Foreground="{ui:ThemeResource TextFillColorSecondaryBrush}"/>
+                                   Foreground="{ui:ThemeResource TextFillColorSecondaryBrush}" />
                     </StackPanel>
 
                     <ui:Button Grid.Column="2"
@@ -63,12 +88,12 @@
                                Content="Install Now"
                                Appearance="Primary"
                                Margin="8,0"
-                               Click="InstallUpdateButton_Click"/>
+                               Click="InstallUpdateButton_Click" />
 
                     <ui:Button Grid.Column="3"
                                Content="Later"
                                Appearance="Secondary"
-                               Click="DismissUpdateButton_Click"/>
+                               Click="DismissUpdateButton_Click" />
                 </Grid>
             </Border>
 
@@ -152,7 +177,8 @@
                                             Visibility="Collapsed" />
 
                                     <!-- Balance info (right side) -->
-                                    <StackPanel Grid.Row="1" Grid.Column="2" HorizontalAlignment="Center" VerticalAlignment="Center">
+                                    <StackPanel Grid.Row="1" Grid.Column="2" HorizontalAlignment="Center"
+                                                VerticalAlignment="Center">
                                         <!-- Worked / Expected -->
                                         <StackPanel Orientation="Horizontal" HorizontalAlignment="Center">
                                             <TextBlock x:Name="TodayWorkedText"
@@ -241,9 +267,10 @@
             <Frame x:Name="LoginFrame"
                    NavigationUIVisibility="Hidden"
                    Visibility="Visible" />
-                   
+
             <!-- Loading Overlay (for auto-login) -->
-            <Grid x:Name="LoadingOverlay" Visibility="Collapsed" Background="{ui:ThemeResource ApplicationBackgroundBrush}">
+            <Grid x:Name="LoadingOverlay" Visibility="Collapsed"
+                  Background="{ui:ThemeResource ApplicationBackgroundBrush}">
                 <StackPanel VerticalAlignment="Center" HorizontalAlignment="Center">
                     <TextBlock Text="ELOGIO"
                                FontSize="32"
