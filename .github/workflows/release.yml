@@ -32,6 +32,20 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v4
 
+      - name: Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+
+      - name: Build curl_proxy.exe
+        run: |
+          pip install pyinstaller curl_cffi
+          cd src/Elogio.Persistence/Scripts
+          pyinstaller --onefile --clean --name curl_proxy curl_proxy.py
+          mkdir -p ../tools
+          mv dist/curl_proxy.exe ../tools/
+        shell: bash
+
       - name: Setup .NET
         uses: actions/setup-dotnet@v4
         with:

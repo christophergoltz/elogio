@@ -1,0 +1,3 @@
+# Requirements for curl_proxy.py
+# Used by PyInstaller to build curl_proxy.exe
+curl_cffi>=0.7.0
