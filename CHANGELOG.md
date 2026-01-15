@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.1.7](https://github.com/christophergoltz/elogio/compare/v0.1.6...v0.1.7) (2026-01-15)
+
+
+### Features
+
+* **updates:** improve update system and build curl_proxy.exe ([#16](https://github.com/christophergoltz/elogio/issues/16)) ([99bd315](https://github.com/christophergoltz/elogio/commit/99bd3151232337d1af1770f61b2d86fd5e9ad60f))
+
 ## [0.1.6](https://github.com/christophergoltz/elogio/compare/v0.1.5...v0.1.6) (2026-01-15)
 
 
