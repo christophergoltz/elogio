@@ -17,6 +17,7 @@ public partial class MainWindow
     private readonly INavigationService _navigationService;
     private readonly IKelioService _kelioService;
     private readonly IUpdateService _updateService;
+    private readonly MainViewModel _viewModel;
     private readonly Snackbar _snackbar;
 
     // Track current punch state: null = unknown, true = clocked in, false = clocked out
@@ -33,6 +34,7 @@ public partial class MainWindow
         _navigationService = navigationService;
         _kelioService = kelioService;
         _updateService = updateService;
+        _viewModel = viewModel;
 
         DataContext = viewModel;
 
@@ -42,7 +44,7 @@ public partial class MainWindow
         // Initialize Snackbar
         _snackbar = new Snackbar(SnackbarPresenter);
 
-        // Subscribe to update available event
+        // Subscribe to update available event for the banner display
         _updateService.UpdateAvailable += OnUpdateAvailable;
     }
     
@@ -108,18 +110,11 @@ public partial class MainWindow
     }
 
     /// <summary>
-    /// Check for application updates in background.
+    /// Check for application updates in background via the ViewModel.
     /// </summary>
     private async Task CheckForUpdatesAsync()
     {
-        try
-        {
-            await _updateService.CheckForUpdatesAsync();
-        }
-        catch (Exception ex)
-        {
-            Log.Warning(ex, "Update check failed");
-        }
+        await _viewModel.CheckForUpdatesAsync();
     }
 
     /// <summary>
