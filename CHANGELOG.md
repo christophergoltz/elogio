@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.1.4](https://github.com/christophergoltz/elogio/compare/v0.1.3...v0.1.4) (2026-01-15)
+
+
+### Features
+
+* **calendar:** add absence display and fix balance calculation ([#9](https://github.com/christophergoltz/elogio/issues/9)) ([5e60e5c](https://github.com/christophergoltz/elogio/commit/5e60e5c635b5419e13ce1de0a6e79f8a204900d8))
+
 ## [0.1.3](https://github.com/christophergoltz/elogio/compare/v0.1.2...v0.1.3) (2026-01-14)
 
 
