@@ -161,12 +161,24 @@ public class LoggingDelegatingHandler : DelegatingHandler
 
     /// <summary>
     /// Clear the log file.
+    /// Silently ignores errors if the file is locked by another process.
     /// </summary>
     public static void ClearLog()
     {
-        if (File.Exists(LogFile))
+        try
         {
-            File.Delete(LogFile);
+            if (File.Exists(LogFile))
+            {
+                File.Delete(LogFile);
+            }
+        }
+        catch (IOException)
+        {
+            // File is locked by another process - ignore
+        }
+        catch (UnauthorizedAccessException)
+        {
+            // File is in use or access denied - ignore
         }
     }
 }

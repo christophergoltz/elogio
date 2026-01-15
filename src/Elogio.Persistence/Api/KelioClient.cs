@@ -263,18 +263,20 @@ public partial class KelioClient : IDisposable
 
         await LogDebugAsync($"[curl_cffi] Portal session ID extracted: {sessionId}");
 
-        // Load GWT JavaScript files - the server may require these to be downloaded
+        // Load GWT JavaScript files in parallel - the server may require these to be downloaded
+        // OPTIMIZED: Load both files concurrently
         try
         {
-            await _curlClient.GetAsync(
-                $"{_baseUrl}/open/bwt/portail/portail.nocache.js",
-                cookies: _sessionCookie);
-            await LogDebugAsync("[curl_cffi] Loaded portail.nocache.js");
+            var sw = Stopwatch.StartNew();
+            var gwtTasks = new[]
+            {
+                _curlClient.GetAsync($"{_baseUrl}/open/bwt/portail/portail.nocache.js", cookies: _sessionCookie),
+                _curlClient.GetAsync($"{_baseUrl}/open/bwt/portail/85D2B992F6111BC9BF615C4D657B05CC.cache.js", cookies: _sessionCookie)
+            };
 
-            await _curlClient.GetAsync(
-                $"{_baseUrl}/open/bwt/portail/85D2B992F6111BC9BF615C4D657B05CC.cache.js",
-                cookies: _sessionCookie);
-            await LogDebugAsync("[curl_cffi] Loaded cache.js");
+            await Task.WhenAll(gwtTasks);
+            Log.Information("[PERF] GetSessionIdFromPortal: GWT files loaded in PARALLEL - {ElapsedMs}ms", sw.ElapsedMilliseconds);
+            await LogDebugAsync("[curl_cffi] Loaded portail GWT files (parallel)");
         }
         catch (Exception ex)
         {
@@ -409,18 +411,17 @@ public partial class KelioClient : IDisposable
                 _sessionCookie = newCookie;
             }
 
-            // Load declaration app GWT files - SEQUENTIAL (potential optimization: parallel)
+            // Load declaration app GWT files in parallel
+            // OPTIMIZED: Load both files concurrently
             sw.Restart();
-            await _curlClient.GetAsync(
-                $"{_baseUrl}/open/bwt/app_declaration_desktop/app_declaration_desktop.nocache.js",
-                cookies: _sessionCookie);
-            Log.Information("[PERF] InitializeServerState: GWT nocache.js took {ElapsedMs}ms", sw.ElapsedMilliseconds);
+            var gwtTasks = new[]
+            {
+                _curlClient.GetAsync($"{_baseUrl}/open/bwt/app_declaration_desktop/app_declaration_desktop.nocache.js", cookies: _sessionCookie),
+                _curlClient.GetAsync($"{_baseUrl}/open/bwt/app_declaration_desktop/1A313ED29AA1E74DD777D2CCF3248188.cache.js", cookies: _sessionCookie)
+            };
 
-            sw.Restart();
-            await _curlClient.GetAsync(
-                $"{_baseUrl}/open/bwt/app_declaration_desktop/1A313ED29AA1E74DD777D2CCF3248188.cache.js",
-                cookies: _sessionCookie);
-            Log.Information("[PERF] InitializeServerState: GWT cache.js took {ElapsedMs}ms", sw.ElapsedMilliseconds);
+            await Task.WhenAll(gwtTasks);
+            Log.Information("[PERF] InitializeServerState: GWT files loaded in PARALLEL - {ElapsedMs}ms", sw.ElapsedMilliseconds);
         }
         catch (Exception ex)
         {
@@ -902,6 +903,7 @@ public partial class KelioClient : IDisposable
     /// Load calendar-specific translations required for absence API.
     /// Must be called after CalendarGlobalConnectAsync and uses calendar JSP referer.
     /// HAR capture shows browser loads "calendrier.annuel.intranet_" before absence requests.
+    /// OPTIMIZED: Runs all translation requests in parallel using Task.WhenAll.
     /// </summary>
     private async Task LoadCalendarTranslationsAsync()
     {
@@ -912,8 +914,12 @@ public partial class KelioClient : IDisposable
             "calendrier.annuel.intranet_"
         };
 
-        foreach (var prefix in prefixes)
+        var totalSw = Stopwatch.StartNew();
+
+        // Run all translation requests in parallel
+        var tasks = prefixes.Select(async prefix =>
         {
+            var sw = Stopwatch.StartNew();
             try
             {
                 await LogDebugAsync($"LoadCalendarTranslations - loading {prefix} with employeeId={_employeeId}");
@@ -921,13 +927,24 @@ public partial class KelioClient : IDisposable
                 // Use calendar JSP referer for these requests
                 var response = await SendGwtRequestInternalAsync(gwtRequest, "/open/bwt/intranet_calendrier_absence.jsp");
                 var hasException = response.Contains("ExceptionBWT");
+                Log.Information("[PERF] LoadCalendarTranslations: '{Prefix}' took {ElapsedMs}ms", prefix, sw.ElapsedMilliseconds);
                 await LogDebugAsync($"LoadCalendarTranslations - {prefix} response: exception={hasException}, length={response.Length}");
+                return (prefix, success: !hasException);
             }
             catch (Exception ex)
             {
+                Log.Warning("[PERF] LoadCalendarTranslations: '{Prefix}' failed after {ElapsedMs}ms: {Error}",
+                    prefix, sw.ElapsedMilliseconds, ex.Message);
                 await LogDebugAsync($"LoadCalendarTranslations - {prefix} warning: {ex.Message}");
+                return (prefix, success: false);
             }
-        }
+        }).ToList();
+
+        var results = await Task.WhenAll(tasks);
+        var successCount = results.Count(r => r.success);
+
+        Log.Information("[PERF] LoadCalendarTranslations: PARALLEL - TOTAL {ElapsedMs}ms ({SuccessCount}/{TotalCount} succeeded)",
+            totalSw.ElapsedMilliseconds, successCount, prefixes.Length);
     }
 
     /// <summary>
