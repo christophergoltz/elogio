@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.1.6](https://github.com/christophergoltz/elogio/compare/v0.1.5...v0.1.6) (2026-01-15)
+
+
+### Features
+
+* **build:** add curl_proxy.exe build to release pipeline ([#14](https://github.com/christophergoltz/elogio/issues/14)) ([1ca24c7](https://github.com/christophergoltz/elogio/commit/1ca24c775825503ee11f47dd37a0da5e0dff481b))
+
 ## [0.1.5](https://github.com/christophergoltz/elogio/compare/v0.1.4...v0.1.5) (2026-01-15)
 
 
