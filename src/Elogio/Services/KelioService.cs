@@ -15,6 +15,9 @@ public class KelioService : IKelioService, IDisposable
     // Session-only cache for month data to speed up navigation
     private readonly Dictionary<(int year, int month), MonthData> _monthCache = new();
 
+    // Session-only cache for absence data
+    private readonly Dictionary<(int year, int month), AbsenceCalendarDto> _absenceCache = new();
+
     public bool IsAuthenticated => _client?.SessionId != null;
     public string? EmployeeName => _employeeName;
     public int? EmployeeId => _client?.EmployeeId;
@@ -104,7 +107,8 @@ public class KelioService : IKelioService, IDisposable
     public void ClearCache()
     {
         _monthCache.Clear();
-        Log.Information("Month cache cleared");
+        _absenceCache.Clear();
+        Log.Information("Month and absence cache cleared");
     }
 
     public void Logout()
@@ -124,6 +128,86 @@ public class KelioService : IKelioService, IDisposable
         }
 
         return await _client.PunchAsync();
+    }
+
+    public async Task<AbsenceCalendarDto?> GetMonthAbsencesAsync(int year, int month)
+    {
+        var key = (year, month);
+
+        // Check cache first
+        if (_absenceCache.TryGetValue(key, out var cached))
+        {
+            Log.Information("GetMonthAbsencesAsync: Returning cached data for {Year}-{Month}", year, month);
+            return cached;
+        }
+
+        if (_client == null || !IsAuthenticated)
+        {
+            Log.Warning("GetMonthAbsencesAsync: Client not authenticated");
+            return null;
+        }
+
+        try
+        {
+            // Extend date range to include visible days from adjacent months in the calendar grid
+            // Add 7 days before and after to cover leading/trailing days in the grid
+            var startDate = new DateOnly(year, month, 1).AddDays(-7);
+            var endDate = new DateOnly(year, month, 1).AddMonths(1).AddDays(13);
+
+            Log.Information("GetMonthAbsencesAsync: Fetching absences for {StartDate} to {EndDate} (month {Year}-{Month})",
+                startDate, endDate, year, month);
+
+            var data = await _client.GetAbsencesAsync(startDate, endDate);
+
+            if (data != null)
+            {
+                _absenceCache[key] = data;
+                Log.Information("GetMonthAbsencesAsync: Got {DayCount} days, {VacationCount} vacation, {SickCount} sick leave",
+                    data.Days.Count, data.VacationDays.Count(), data.SickLeaveDays.Count());
+            }
+
+            return data;
+        }
+        catch (Exception ex)
+        {
+            Log.Error(ex, "GetMonthAbsencesAsync: Failed to fetch absences for {Year}-{Month}", year, month);
+            return null;
+        }
+    }
+
+    public void PrefetchAdjacentMonthAbsences(int year, int month)
+    {
+        if (_client == null || !IsAuthenticated)
+            return;
+
+        // Prefetch previous month in background
+        var (prevYear, prevMonth) = GetPreviousMonth(year, month);
+        var prevKey = (prevYear, prevMonth);
+
+        if (!_absenceCache.ContainsKey(prevKey))
+        {
+            Log.Information("Prefetching absences for previous month {Year}-{Month}", prevYear, prevMonth);
+            _ = Task.Run(async () =>
+            {
+                try
+                {
+                    // Use same extended date range logic as GetMonthAbsencesAsync
+                    var startDate = new DateOnly(prevYear, prevMonth, 1).AddDays(-7);
+                    var endDate = new DateOnly(prevYear, prevMonth, 1).AddMonths(1).AddDays(13);
+
+                    var data = await _client.GetAbsencesAsync(startDate, endDate);
+                    if (data != null)
+                    {
+                        _absenceCache[prevKey] = data;
+                        Log.Information("Absence prefetch complete for {Year}-{Month}", prevYear, prevMonth);
+                    }
+                }
+                catch (Exception ex)
+                {
+                    Log.Warning(ex, "Absence prefetch failed for {Year}-{Month}", prevYear, prevMonth);
+                }
+            });
+        }
     }
 
     private async Task<MonthData> FetchMonthDataInternalAsync(int year, int month)

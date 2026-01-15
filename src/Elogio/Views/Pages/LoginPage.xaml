@@ -4,9 +4,10 @@
       xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
       xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
       xmlns:ui="http://schemas.lepo.co/wpfui/2022/xaml"
+      xmlns:viewModels="clr-namespace:Elogio.ViewModels"
       mc:Ignorable="d"
       d:DesignHeight="600" d:DesignWidth="500"
-      Title="Login">
+      Title="Login" d:DataContext="{d:DesignInstance viewModels:LoginViewModel}">
 
     <Grid VerticalAlignment="Center" HorizontalAlignment="Center">
         <ui:Card Width="350" Padding="24">
@@ -25,8 +26,7 @@
                            Margin="0,0,0,32" />
 
                 <!-- Server URL -->
-                <ui:TextBox x:Name="ServerUrlTextBox"
-                            PlaceholderText="Server URL"
+                <ui:TextBox PlaceholderText="Server URL (https://company.kelio.io)" 
                             Text="{Binding ServerUrl, UpdateSourceTrigger=PropertyChanged}"
                             IsEnabled="{Binding IsLoggingIn, Converter={StaticResource InverseBoolConverter}}"
                             Margin="0,0,0,16">
@@ -36,7 +36,7 @@
                 </ui:TextBox>
 
                 <!-- Username -->
-                <ui:TextBox x:Name="UsernameTextBox"
+                <ui:TextBox 
                             PlaceholderText="Username"
                             Text="{Binding Username, UpdateSourceTrigger=PropertyChanged}"
                             IsEnabled="{Binding IsLoggingIn, Converter={StaticResource InverseBoolConverter}}"
@@ -47,8 +47,7 @@
                 </ui:TextBox>
 
                 <!-- Password -->
-                <ui:PasswordBox x:Name="PasswordBox"
-                                PlaceholderText="Password"
+                <ui:PasswordBox PlaceholderText="Password"
                                 Password="{Binding Password, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}"
                                 IsEnabled="{Binding IsLoggingIn, Converter={StaticResource InverseBoolConverter}}"
                                 Margin="0,0,0,16">
@@ -64,8 +63,7 @@
                           Margin="0,0,0,24" />
 
                 <!-- Error Message -->
-                <ui:InfoBar x:Name="ErrorInfoBar"
-                            Title="Login Failed"
+                <ui:InfoBar Title="Login Failed"
                             Message="{Binding ErrorMessage}"
                             Severity="Error"
                             IsOpen="{Binding HasError}"

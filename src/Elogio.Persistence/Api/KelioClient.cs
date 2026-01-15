@@ -28,6 +28,7 @@ public partial class KelioClient : IDisposable
     private readonly GwtRpcRequestBuilder _requestBuilder = new();
     private readonly SemainePresenceParser _presenceParser = new();
     private readonly BadgerSignalerResponseParser _punchParser = new();
+    private readonly AbsenceCalendarParser _absenceParser = new();
     private readonly BwpCodec _bwpCodec = new();
     private readonly string _baseUrl;
 
@@ -35,8 +36,11 @@ public partial class KelioClient : IDisposable
     private string? _sessionId;
     private string? _bwpCsrfToken; // CSRF token from BWP connect response
     private string? _sessionCookie; // Manual cookie management for TLS consistency
-    private int _employeeId; // Dynamic employee ID from GlobalBWTService connect
+    private int _employeeId; // Session context ID from GlobalBWTService connect (portal) - used for most requests
+    private int _calendarContextId; // Context ID from Calendar GlobalBWTService connect
+    private int _realEmployeeId; // ACTUAL employee ID from getParametreIntranet - used for absence requests
     private bool _isAuthenticated;
+    private bool _calendarAppInitialized; // Whether the absence calendar app has been launched
 
     /// <summary>
     /// If true, use curl_cffi for BWP requests to bypass TLS fingerprinting.
@@ -460,6 +464,59 @@ public partial class KelioClient : IDisposable
     }
 
     /// <summary>
+    /// Call GlobalBWTService connect for the calendar app.
+    /// This uses Short=16 (vs 21 for portal) and the calendar JSP as referer.
+    /// This must be called before making calendar/absence API requests.
+    /// </summary>
+    private async Task CalendarGlobalConnectAsync()
+    {
+        if (string.IsNullOrEmpty(_sessionId))
+            return;
+
+        var timestampSec = DateTimeOffset.UtcNow.ToUnixTimeSeconds();
+        var timestampMs = DateTimeOffset.UtcNow.ToUnixTimeMilliseconds();
+        var gwtRequest = _requestBuilder.BuildCalendarConnectRequest(_sessionId, timestampSec);
+
+        var url = $"{_baseUrl}/open/bwpDispatchServlet?{timestampMs}";
+        var cookies = GetCookiesString();
+
+        var headers = new Dictionary<string, string>
+        {
+            ["Content-Type"] = "text/bwp;charset=UTF-8",
+            ["X-Requested-With"] = "XMLHttpRequest",
+            ["Cache-Control"] = "no-cache",
+            ["Origin"] = _baseUrl,
+            ["Referer"] = $"{_baseUrl}/open/bwt/intranet_calendrier_absence.jsp",
+            ["If-Modified-Since"] = "Thu, 01 Jan 1970 00:00:00 GMT",
+            ["x-kelio-stat"] = $"cst={timestampMs}",
+            ["User-Agent"] = BrowserUserAgent,
+            ["Sec-Fetch-Dest"] = "empty",
+            ["Sec-Fetch-Mode"] = "cors",
+            ["Sec-Fetch-Site"] = "same-origin",
+            ["sec-ch-ua"] = "\"Chromium\";v=\"131\", \"Not_A Brand\";v=\"24\"",
+            ["sec-ch-ua-mobile"] = "?0",
+            ["sec-ch-ua-platform"] = "\"Windows\""
+        };
+
+        await LogDebugAsync($"[curl_cffi] Calendar GlobalBWTService connect to {url}");
+
+        // GlobalBWTService connect is sent RAW (not BWP-encoded)
+        var response = await _curlClient.PostAsync(url, gwtRequest, headers, cookies);
+
+        await LogDebugAsync($"[curl_cffi] Calendar GlobalBWTService connect response status: {response.StatusCode}");
+
+        if (!response.IsSuccessStatusCode)
+        {
+            throw new HttpRequestException($"Calendar GlobalBWTService connect failed with status {response.StatusCode}");
+        }
+
+        // Extract session context ID from calendar connect response
+        // This is the incrementing session counter used in subsequent requests
+        _calendarContextId = ExtractEmployeeIdFromConnectResponse(response.Body);
+        await LogDebugAsync($"[curl_cffi] Calendar session context ID: {_calendarContextId}");
+    }
+
+    /// <summary>
     /// Extract the dynamic employee ID from GlobalBWTService connect response.
     /// The employee ID appears near the END of the data tokens, before the user's name.
     /// Pattern: [..., TYPE_REF, EMPLOYEE_ID, TYPE_REF, FIRSTNAME_IDX, TYPE_REF, LASTNAME_IDX, ...]
@@ -553,10 +610,15 @@ public partial class KelioClient : IDisposable
                     // So employee ID is at i-2 (loop guarantees i >= 2)
                     if (int.TryParse(dataTokens[i - 1], out var typeRef) && typeRef == 4 &&
                         int.TryParse(dataTokens[i - 2], out var employeeId) &&
-                        employeeId >= 100 && employeeId <= 9999)
+                        employeeId > 0 && employeeId <= 99999)
                     {
                         _ = LogDebugAsync($"ExtractEmployeeId: Found employee ID {employeeId} before name pattern at pos {i-2}");
                         return employeeId;
+                    }
+                    else
+                    {
+                        // Log why it failed for debugging
+                        _ = LogDebugAsync($"ExtractEmployeeId: Pattern found but validation failed. i-1={dataTokens[i-1]}, i-2={dataTokens[i-2]}");
                     }
                 }
             }
@@ -569,6 +631,167 @@ public partial class KelioClient : IDisposable
             // Log the error for debugging
             _ = LogDebugAsync($"ExtractEmployeeIdFromConnectResponse error: {ex.Message}");
             return 0;
+        }
+    }
+
+    /// <summary>
+    /// Initialize the calendar/absence app before making absence-related API calls.
+    /// Based on HAR capture analysis: load the intranet_calendrier_absence.jsp page and GWT files.
+    /// </summary>
+    private async Task InitializeCalendarAppAsync()
+    {
+        if (_calendarAppInitialized)
+            return;
+
+        try
+        {
+            await LogDebugAsync("InitializeCalendarApp - starting initialization");
+
+            // Step 0: Navigate to intranet section first (required per HAR capture)
+            // The browser navigates to homepage?ACTION=intranet before the calendar JSP
+            try
+            {
+                await LogDebugAsync("InitializeCalendarApp - navigating to intranet section");
+                var intranetResponse = await _curlClient.GetAsync(
+                    $"{_baseUrl}/open/homepage?ACTION=intranet&asked=6&header=0",
+                    cookies: _sessionCookie);
+                await LogDebugAsync($"InitializeCalendarApp - intranet navigation status: {intranetResponse.StatusCode}");
+
+                var newCookie = ExtractSessionCookie(intranetResponse.Headers);
+                if (!string.IsNullOrEmpty(newCookie))
+                {
+                    _sessionCookie = newCookie;
+                    await LogDebugAsync("InitializeCalendarApp - updated cookie from intranet navigation");
+                }
+            }
+            catch (Exception ex)
+            {
+                await LogDebugAsync($"InitializeCalendarApp - intranet navigation warning: {ex.Message}");
+            }
+
+            // Step 1: Load the intranet_calendrier_absence.jsp page
+            // This sets up the server-side session state for the calendar module
+            try
+            {
+                await LogDebugAsync("InitializeCalendarApp - loading intranet_calendrier_absence.jsp");
+                var jspResponse = await _curlClient.GetAsync(
+                    $"{_baseUrl}/open/bwt/intranet_calendrier_absence.jsp",
+                    cookies: _sessionCookie);
+                await LogDebugAsync($"InitializeCalendarApp - JSP page status: {jspResponse.StatusCode}");
+
+                var newCookie = ExtractSessionCookie(jspResponse.Headers);
+                if (!string.IsNullOrEmpty(newCookie))
+                {
+                    _sessionCookie = newCookie;
+                    await LogDebugAsync("InitializeCalendarApp - updated cookie from JSP");
+                }
+            }
+            catch (Exception ex)
+            {
+                await LogDebugAsync($"InitializeCalendarApp - JSP page warning: {ex.Message}");
+            }
+
+            // Step 2: Load the GWT nocache.js file
+            try
+            {
+                await LogDebugAsync("InitializeCalendarApp - loading GWT nocache.js");
+                await _curlClient.GetAsync(
+                    $"{_baseUrl}/open/bwt/intranet_calendrier_absence/intranet_calendrier_absence.nocache.js",
+                    cookies: _sessionCookie);
+                await LogDebugAsync("InitializeCalendarApp - loaded nocache.js");
+            }
+            catch (Exception ex)
+            {
+                await LogDebugAsync($"InitializeCalendarApp - nocache.js warning: {ex.Message}");
+            }
+
+            // Step 3: Load the GWT cache.js file (hash from HAR capture)
+            try
+            {
+                await LogDebugAsync("InitializeCalendarApp - loading GWT cache.js");
+                await _curlClient.GetAsync(
+                    $"{_baseUrl}/open/bwt/intranet_calendrier_absence/B774D9023F6AE5125A0446A2F6C1BC19.cache.js",
+                    cookies: _sessionCookie);
+                await LogDebugAsync("InitializeCalendarApp - loaded cache.js");
+            }
+            catch (Exception ex)
+            {
+                await LogDebugAsync($"InitializeCalendarApp - cache.js warning: {ex.Message}");
+            }
+
+            // Step 4: Make GlobalBWTService.connect request for calendar app
+            // This activates the calendar module for the session (uses Short=16 vs 21 for portal)
+            try
+            {
+                await LogDebugAsync("InitializeCalendarApp - making GlobalBWTService connect for calendar");
+                await CalendarGlobalConnectAsync();
+                await LogDebugAsync("InitializeCalendarApp - GlobalBWTService connect complete");
+            }
+            catch (Exception ex)
+            {
+                await LogDebugAsync($"InitializeCalendarApp - GlobalBWTService connect warning: {ex.Message}");
+            }
+
+            // Step 5: Call getPresentationModel for GlobalPresentationModel
+            // HAR shows this is called before the calendar-specific presentation model
+            try
+            {
+                await LogDebugAsync("InitializeCalendarApp - calling getPresentationModel for GlobalPresentationModel");
+                await CalendarGetGlobalPresentationModelAsync();
+                await LogDebugAsync("InitializeCalendarApp - GlobalPresentationModel complete");
+            }
+            catch (Exception ex)
+            {
+                await LogDebugAsync($"InitializeCalendarApp - GlobalPresentationModel warning: {ex.Message}");
+            }
+
+            // Step 6: Call getParametreIntranet
+            // HAR shows this is called after GlobalPresentationModel, before translations
+            try
+            {
+                await LogDebugAsync("InitializeCalendarApp - calling getParametreIntranet");
+                await CalendarGetParametreIntranetAsync();
+                await LogDebugAsync("InitializeCalendarApp - getParametreIntranet complete");
+            }
+            catch (Exception ex)
+            {
+                await LogDebugAsync($"InitializeCalendarApp - getParametreIntranet warning: {ex.Message}");
+            }
+
+            // Step 7: Load calendar-specific translations (required for absence API)
+            // HAR capture shows browser loads "calendrier.annuel.intranet_" translations before absence request
+            try
+            {
+                await LogDebugAsync("InitializeCalendarApp - loading calendar translations");
+                await LoadCalendarTranslationsAsync();
+                await LogDebugAsync("InitializeCalendarApp - calendar translations loaded");
+            }
+            catch (Exception ex)
+            {
+                await LogDebugAsync($"InitializeCalendarApp - calendar translations warning: {ex.Message}");
+            }
+
+            // Step 8: Call getPresentationModel for CalendrierAbsencePresentationModel
+            // CRITICAL: This MUST be called before getAbsencesEtJoursFeries! (discovered from HAR analysis)
+            // This initializes the server-side state for the calendar module.
+            try
+            {
+                await LogDebugAsync("InitializeCalendarApp - calling getPresentationModel for CalendrierAbsencePresentationModel");
+                await CalendarGetPresentationModelAsync();
+                await LogDebugAsync("InitializeCalendarApp - CalendrierAbsencePresentationModel complete");
+            }
+            catch (Exception ex)
+            {
+                await LogDebugAsync($"InitializeCalendarApp - CalendrierAbsencePresentationModel warning: {ex.Message}");
+            }
+
+            _calendarAppInitialized = true;
+            await LogDebugAsync("InitializeCalendarApp - complete");
+        }
+        catch (Exception ex)
+        {
+            await LogDebugAsync($"InitializeCalendarApp - warning: {ex.Message}");
+            _calendarAppInitialized = true;
         }
     }
 
@@ -601,6 +824,229 @@ public partial class KelioClient : IDisposable
             {
                 await LogDebugAsync($"LoadTranslations - {prefix} warning: {ex.Message}");
             }
+        }
+    }
+
+    /// <summary>
+    /// Load calendar-specific translations required for absence API.
+    /// Must be called after CalendarGlobalConnectAsync and uses calendar JSP referer.
+    /// HAR capture shows browser loads "calendrier.annuel.intranet_" before absence requests.
+    /// </summary>
+    private async Task LoadCalendarTranslationsAsync()
+    {
+        // Calendar-specific translation prefixes from HAR capture
+        var prefixes = new[]
+        {
+            "global_",
+            "calendrier.annuel.intranet_"
+        };
+
+        foreach (var prefix in prefixes)
+        {
+            try
+            {
+                await LogDebugAsync($"LoadCalendarTranslations - loading {prefix} with employeeId={_employeeId}");
+                var gwtRequest = _requestBuilder.BuildGetTraductionsRequest(_sessionId!, prefix, _employeeId);
+                // Use calendar JSP referer for these requests
+                var response = await SendGwtRequestInternalAsync(gwtRequest, "/open/bwt/intranet_calendrier_absence.jsp");
+                var hasException = response.Contains("ExceptionBWT");
+                await LogDebugAsync($"LoadCalendarTranslations - {prefix} response: exception={hasException}, length={response.Length}");
+            }
+            catch (Exception ex)
+            {
+                await LogDebugAsync($"LoadCalendarTranslations - {prefix} warning: {ex.Message}");
+            }
+        }
+    }
+
+    /// <summary>
+    /// Call GlobalBWTService.getPresentationModel for GlobalPresentationModel.
+    /// This is called before CalendrierAbsencePresentationModel.
+    /// </summary>
+    private async Task CalendarGetGlobalPresentationModelAsync()
+    {
+        if (string.IsNullOrEmpty(_sessionId))
+            return;
+
+        var timestampMs = DateTimeOffset.UtcNow.ToUnixTimeMilliseconds();
+        var gwtRequest = _requestBuilder.BuildGetGlobalPresentationModelRequest(_sessionId, _employeeId);
+
+        var url = $"{_baseUrl}/open/bwpDispatchServlet?{timestampMs}";
+        var cookies = GetCookiesString();
+
+        var headers = new Dictionary<string, string>
+        {
+            ["Content-Type"] = "text/bwp;charset=UTF-8",
+            ["X-Requested-With"] = "XMLHttpRequest",
+            ["Cache-Control"] = "no-cache",
+            ["Origin"] = _baseUrl,
+            ["Referer"] = $"{_baseUrl}/open/bwt/intranet_calendrier_absence.jsp",
+            ["If-Modified-Since"] = "Thu, 01 Jan 1970 00:00:00 GMT",
+            ["x-kelio-stat"] = $"cst={timestampMs}",
+            ["User-Agent"] = BrowserUserAgent,
+            ["Sec-Fetch-Dest"] = "empty",
+            ["Sec-Fetch-Mode"] = "cors",
+            ["Sec-Fetch-Site"] = "same-origin",
+            ["sec-ch-ua"] = "\"Chromium\";v=\"131\", \"Not_A Brand\";v=\"24\"",
+            ["sec-ch-ua-mobile"] = "?0",
+            ["sec-ch-ua-platform"] = "\"Windows\""
+        };
+
+        await LogDebugAsync($"[curl_cffi] Calendar GlobalPresentationModel request: {gwtRequest}");
+
+        var bodyToSend = _bwpCodec.Encode(gwtRequest);
+        var response = await _curlClient.PostWithBodyFileAsync(url, bodyToSend, headers, cookies);
+
+        await LogDebugAsync($"[curl_cffi] GlobalPresentationModel response status: {response.StatusCode}");
+
+        if (!response.IsSuccessStatusCode)
+        {
+            await LogDebugAsync($"[curl_cffi] GlobalPresentationModel response body: {response.Body[..Math.Min(300, response.Body.Length)]}");
+            throw new HttpRequestException($"GlobalPresentationModel failed with status {response.StatusCode}");
+        }
+    }
+
+    /// <summary>
+    /// Call LiensBWTService.getParametreIntranet.
+    /// This is called after GlobalPresentationModel and before calendar translations.
+    /// </summary>
+    private async Task CalendarGetParametreIntranetAsync()
+    {
+        if (string.IsNullOrEmpty(_sessionId))
+            return;
+
+        var timestampMs = DateTimeOffset.UtcNow.ToUnixTimeMilliseconds();
+        var gwtRequest = _requestBuilder.BuildGetParametreIntranetRequest(_sessionId, _employeeId);
+
+        var url = $"{_baseUrl}/open/bwpDispatchServlet?{timestampMs}";
+        var cookies = GetCookiesString();
+
+        var headers = new Dictionary<string, string>
+        {
+            ["Content-Type"] = "text/bwp;charset=UTF-8",
+            ["X-Requested-With"] = "XMLHttpRequest",
+            ["Cache-Control"] = "no-cache",
+            ["Origin"] = _baseUrl,
+            ["Referer"] = $"{_baseUrl}/open/bwt/intranet_calendrier_absence.jsp",
+            ["If-Modified-Since"] = "Thu, 01 Jan 1970 00:00:00 GMT",
+            ["x-kelio-stat"] = $"cst={timestampMs}",
+            ["User-Agent"] = BrowserUserAgent,
+            ["Sec-Fetch-Dest"] = "empty",
+            ["Sec-Fetch-Mode"] = "cors",
+            ["Sec-Fetch-Site"] = "same-origin",
+            ["sec-ch-ua"] = "\"Chromium\";v=\"131\", \"Not_A Brand\";v=\"24\"",
+            ["sec-ch-ua-mobile"] = "?0",
+            ["sec-ch-ua-platform"] = "\"Windows\""
+        };
+
+        await LogDebugAsync($"[curl_cffi] Calendar getParametreIntranet request: {gwtRequest}");
+
+        var bodyToSend = _bwpCodec.Encode(gwtRequest);
+        var response = await _curlClient.PostWithBodyFileAsync(url, bodyToSend, headers, cookies);
+
+        await LogDebugAsync($"[curl_cffi] getParametreIntranet response status: {response.StatusCode}");
+
+        if (!response.IsSuccessStatusCode)
+        {
+            await LogDebugAsync($"[curl_cffi] getParametreIntranet response body: {response.Body[..Math.Min(300, response.Body.Length)]}");
+            throw new HttpRequestException($"getParametreIntranet failed with status {response.StatusCode}");
+        }
+
+        // Decode and extract the REAL employee ID from the response
+        // Response format: ...,"Goltz Christopher",0,1,2,3,0,3,3,4,1,3,0,5,6,3,0,3,52
+        // The employee ID (52) appears at the very end
+        var responseBody = response.Body;
+        if (_bwpCodec.IsBwp(responseBody))
+        {
+            var decoded = _bwpCodec.Decode(responseBody);
+            responseBody = decoded.Decoded;
+        }
+
+        await LogDebugAsync($"[curl_cffi] getParametreIntranet decoded response: {responseBody}");
+
+        // Extract employee ID from the end of the response
+        // The pattern is: ,3,{employeeId} at the end (where 3 is the Integer type index)
+        var parts = responseBody.Split(',');
+        if (parts.Length >= 2)
+        {
+            // The last numeric value is the employee ID
+            for (int i = parts.Length - 1; i >= 0; i--)
+            {
+                if (int.TryParse(parts[i], out var potentialId) && potentialId > 0 && potentialId < 100000)
+                {
+                    // Verify it's preceded by a type reference (3 for Integer in this context)
+                    if (i > 0 && parts[i - 1] == "3")
+                    {
+                        _realEmployeeId = potentialId;
+                        await LogDebugAsync($"[curl_cffi] Extracted REAL employee ID from getParametreIntranet: {_realEmployeeId}");
+                        break;
+                    }
+                }
+            }
+        }
+    }
+
+    /// <summary>
+    /// Call GlobalBWTService.getPresentationModel for CalendrierAbsencePresentationModel.
+    /// CRITICAL: This MUST be called before getAbsencesEtJoursFeries or we get 401!
+    /// HAR shows this uses the employee ID as the context parameter.
+    /// </summary>
+    private async Task CalendarGetPresentationModelAsync()
+    {
+        if (string.IsNullOrEmpty(_sessionId))
+            return;
+
+        var timestampMs = DateTimeOffset.UtcNow.ToUnixTimeMilliseconds();
+
+        var gwtRequest = _requestBuilder.BuildGetPresentationModelRequest(_sessionId, _employeeId);
+
+        var url = $"{_baseUrl}/open/bwpDispatchServlet?{timestampMs}";
+        var cookies = GetCookiesString();
+
+        var headers = new Dictionary<string, string>
+        {
+            ["Content-Type"] = "text/bwp;charset=UTF-8",
+            ["X-Requested-With"] = "XMLHttpRequest",
+            ["Cache-Control"] = "no-cache",
+            ["Origin"] = _baseUrl,
+            ["Referer"] = $"{_baseUrl}/open/bwt/intranet_calendrier_absence.jsp",
+            ["If-Modified-Since"] = "Thu, 01 Jan 1970 00:00:00 GMT",
+            ["x-kelio-stat"] = $"cst={timestampMs}",
+            ["User-Agent"] = BrowserUserAgent,
+            ["Sec-Fetch-Dest"] = "empty",
+            ["Sec-Fetch-Mode"] = "cors",
+            ["Sec-Fetch-Site"] = "same-origin",
+            ["sec-ch-ua"] = "\"Chromium\";v=\"131\", \"Not_A Brand\";v=\"24\"",
+            ["sec-ch-ua-mobile"] = "?0",
+            ["sec-ch-ua-platform"] = "\"Windows\""
+        };
+
+        await LogDebugAsync($"[curl_cffi] Calendar getPresentationModel to {url}");
+        await LogDebugAsync($"[curl_cffi] getPresentationModel request: {gwtRequest}");
+
+        // BWP-encode the request and use body file to avoid character corruption
+        var bodyToSend = _bwpCodec.Encode(gwtRequest);
+        var response = await _curlClient.PostWithBodyFileAsync(url, bodyToSend, headers, cookies);
+
+        await LogDebugAsync($"[curl_cffi] getPresentationModel response status: {response.StatusCode}");
+        await LogDebugAsync($"[curl_cffi] getPresentationModel response (first 300): {response.Body[..Math.Min(300, response.Body.Length)]}");
+
+        if (!response.IsSuccessStatusCode)
+        {
+            throw new HttpRequestException($"getPresentationModel failed with status {response.StatusCode}");
+        }
+
+        // Decode the response to check for errors
+        var responseBody = response.Body;
+        if (_bwpCodec.IsBwp(responseBody))
+        {
+            var decoded = _bwpCodec.Decode(responseBody);
+            responseBody = decoded.Decoded;
+        }
+
+        if (responseBody.Contains("ExceptionBWT"))
+        {
+            await LogDebugAsync("[curl_cffi] getPresentationModel: Server returned ExceptionBWT!");
         }
     }
 
@@ -668,6 +1114,82 @@ public partial class KelioClient : IDisposable
     public Task<WeekPresenceDto?> GetCurrentWeekPresenceAsync()
     {
         return GetWeekPresenceAsync(DateOnly.FromDateTime(DateTime.Today));
+    }
+
+    /// <summary>
+    /// Get absence calendar data (vacation, sick leave, holidays, etc.) for a date range.
+    /// </summary>
+    /// <param name="startDate">Start date of the range</param>
+    /// <param name="endDate">End date of the range</param>
+    /// <returns>Absence calendar data or null if failed</returns>
+    public async Task<AbsenceCalendarDto?> GetAbsencesAsync(DateOnly startDate, DateOnly endDate)
+    {
+        if (!_isAuthenticated || string.IsNullOrEmpty(_sessionId))
+        {
+            throw new InvalidOperationException("Not authenticated. Call LoginAsync first.");
+        }
+
+        if (_employeeId <= 0)
+        {
+            await LogDebugAsync("GetAbsences: Employee ID not set - GlobalBWTService connect may have failed");
+            throw new InvalidOperationException(
+                "Employee ID not available. The GlobalBWTService connect call may have failed during login.");
+        }
+
+        // Initialize the calendar app if not already done
+        if (!_calendarAppInitialized)
+        {
+            await InitializeCalendarAppAsync();
+        }
+
+        var kelioStartDate = GwtRpcRequestBuilder.ToKelioDate(startDate);
+        var kelioEndDate = GwtRpcRequestBuilder.ToKelioDate(endDate);
+
+        // Use the REAL employee ID (from getParametreIntranet) for the employee parameter
+        // Use the session context ID for the context parameter
+        // HAR shows: employeeId=52 (real), contextId=1372 (session counter)
+        var realEmpId = _realEmployeeId > 0 ? _realEmployeeId : _employeeId;
+        var contextId = _calendarContextId > 0 ? _calendarContextId : _employeeId;
+
+        var gwtRequest = _requestBuilder.BuildGetAbsencesRequest(
+            _sessionId, realEmpId, kelioStartDate, kelioEndDate, contextId);
+
+        await LogDebugAsync($"GetAbsences GWT request: realEmployeeId={realEmpId}, contextId={contextId}, start={kelioStartDate}, end={kelioEndDate}");
+
+        // Use custom referer for calendar app requests (required for server authorization)
+        var response = await SendGwtRequestAsync(gwtRequest, "/open/bwt/intranet_calendrier_absence.jsp");
+
+        await LogDebugAsync($"GetAbsences response (first 500 chars): {response[..Math.Min(500, response.Length)]}");
+
+        // Check for ExceptionBWT
+        if (response.Contains("ExceptionBWT"))
+        {
+            await LogDebugAsync("GetAbsences: Server returned ExceptionBWT!");
+            return null;
+        }
+
+        var result = _absenceParser.Parse(response, _employeeId, startDate, endDate);
+
+        if (result != null)
+        {
+            await LogDebugAsync($"GetAbsences result: {result.Days.Count} days, " +
+                $"Vacation={result.VacationDays.Count()}, " +
+                $"SickLeave={result.SickLeaveDays.Count()}, " +
+                $"Holidays={result.PublicHolidays.Count()}");
+        }
+
+        return result;
+    }
+
+    /// <summary>
+    /// Get absence calendar data for the current year.
+    /// </summary>
+    public Task<AbsenceCalendarDto?> GetCurrentYearAbsencesAsync()
+    {
+        var today = DateTime.Today;
+        var startDate = new DateOnly(today.Year, 1, 1);
+        var endDate = new DateOnly(today.Year, 12, 31);
+        return GetAbsencesAsync(startDate, endDate);
     }
 
     /// <summary>
@@ -764,14 +1286,16 @@ public partial class KelioClient : IDisposable
     /// <summary>
     /// Send a raw GWT-RPC request and get the decoded response.
     /// </summary>
-    public async Task<string> SendGwtRequestAsync(string gwtRequest)
+    /// <param name="gwtRequest">The GWT-RPC request body</param>
+    /// <param name="customReferer">Optional custom referer path (e.g., "/open/bwt/intranet_calendrier_absence.jsp")</param>
+    public async Task<string> SendGwtRequestAsync(string gwtRequest, string? customReferer = null)
     {
         if (!_isAuthenticated)
         {
             throw new InvalidOperationException("Not authenticated. Call LoginAsync first.");
         }
 
-        return await SendGwtRequestInternalAsync(gwtRequest);
+        return await SendGwtRequestInternalAsync(gwtRequest, customReferer);
     }
 
     /// <summary>
@@ -779,7 +1303,9 @@ public partial class KelioClient : IDisposable
     /// Uses curl_cffi via Python to bypass TLS fingerprint detection.
     /// CRITICAL: BWP-encoded requests use body file to avoid character corruption.
     /// </summary>
-    private async Task<string> SendGwtRequestInternalAsync(string gwtRequest)
+    /// <param name="gwtRequest">The GWT-RPC request body</param>
+    /// <param name="customReferer">Optional custom referer path (e.g., "/open/bwt/intranet_calendrier_absence.jsp")</param>
+    private async Task<string> SendGwtRequestInternalAsync(string gwtRequest, string? customReferer = null)
     {
         if (!UseCurlImpersonate)
         {
@@ -798,16 +1324,26 @@ public partial class KelioClient : IDisposable
         // Get cookies from CookieContainer
         var cookies = GetCookiesString();
 
+        // Determine the referer - use custom if provided, otherwise default to portail.jsp
+        var referer = customReferer != null
+            ? $"{_baseUrl}{customReferer}"
+            : $"{_baseUrl}/open/bwt/portail.jsp";
+
         // Build headers like the browser sends (matching api_discovery.json captures)
         var headers = new Dictionary<string, string>
         {
             ["Content-Type"] = "text/bwp;charset=UTF-8",
             ["X-Requested-With"] = "XMLHttpRequest",
             ["Cache-Control"] = "no-cache",
-            ["Referer"] = $"{_baseUrl}/open/bwt/portail.jsp",
+            ["Origin"] = _baseUrl,
+            ["Referer"] = referer,
             ["If-Modified-Since"] = "Thu, 01 Jan 1970 00:00:00 GMT",
             ["x-kelio-stat"] = $"cst={timestamp}",
             ["User-Agent"] = BrowserUserAgent,
+            // CORS/Fetch headers from browser
+            ["Sec-Fetch-Dest"] = "empty",
+            ["Sec-Fetch-Mode"] = "cors",
+            ["Sec-Fetch-Site"] = "same-origin",
             // Chrome client hints (sec-ch-ua headers from browser)
             ["sec-ch-ua"] = "\"Chromium\";v=\"131\", \"Not_A Brand\";v=\"24\"",
             ["sec-ch-ua-mobile"] = "?0",
@@ -816,6 +1352,7 @@ public partial class KelioClient : IDisposable
 
         await LogDebugAsync($"[curl_cffi] Sending request to {url}");
         await LogDebugAsync($"[curl_cffi] Cookies: {cookies}");
+        await LogDebugAsync($"[curl_cffi] Referer: {referer}");
         await LogDebugAsync($"[curl_cffi] IsConnectRequest: {isConnectRequest}");
         await LogDebugAsync($"[curl_cffi] Body (first 100): {bodyToSend[..Math.Min(100, bodyToSend.Length)]}");
 

@@ -1,5 +1,6 @@
 using System.Text.RegularExpressions;
 using Elogio.Persistence.Dto;
+using Serilog;
 
 namespace Elogio.Persistence.Protocol;
 
@@ -40,9 +41,13 @@ public partial class SemainePresenceParser
         // Find dates in data tokens (patterns like 20260105)
         var dates = FindDates(message);
 
+        // Find the BDureeHeure type index in string table (varies per response!)
+        var bDureeHeureIndex = FindTypeIndex(message.StringTable, "BDureeHeure");
+        Log.Debug("ParseSemainePresence: BDureeHeure type index = {Index}", bDureeHeureIndex);
+
         // Extract per-day worked/expected seconds from data tokens
-        // Pattern: 15,0,{worked_seconds},15,0,{expected_seconds} for each day
-        var dailyTimes = ExtractDailyTimesFromSeconds(rawData);
+        // Pattern: {typeIndex},0,{worked_seconds},{typeIndex},0,{expected_seconds} for each day
+        var dailyTimes = ExtractDailyTimesFromSeconds(rawData, bDureeHeureIndex);
 
         // Extract badge entries (clock in/out times)
         var badgeEntriesByDate = ExtractBadgeEntries(message, rawData, dates);
@@ -124,17 +129,39 @@ public partial class SemainePresenceParser
     }
 
     /// <summary>
+    /// Find the index of a type in the string table.
+    /// </summary>
+    private static int FindTypeIndex(string[] stringTable, string typeName)
+    {
+        for (int i = 0; i < stringTable.Length; i++)
+        {
+            if (stringTable[i].Contains(typeName))
+            {
+                return i;
+            }
+        }
+        return -1;
+    }
+
+    /// <summary>
     /// Extract daily worked/expected times from raw response.
-    /// The data contains patterns like: 15,0,{seconds} repeated 5 times per day.
+    /// The data contains patterns like: {typeIndex},0,{seconds} repeated 5 times per day.
     /// Structure per day: [val0, val1, val2, workedSeconds, expectedSeconds]
     /// After 7 days, there's a weekly total entry with [worked_total, expected_total]
     /// </summary>
-    private static List<(int WorkedSeconds, int ExpectedSeconds)> ExtractDailyTimesFromSeconds(string rawData)
+    private static List<(int WorkedSeconds, int ExpectedSeconds)> ExtractDailyTimesFromSeconds(string rawData, int bDureeHeureIndex)
     {
         var dailyTimes = new List<(int, int)>();
 
-        // Find all "15,0,{number}" patterns (BDureeHeure type with seconds value)
-        var pattern = TimeSecondsPattern();
+        // If type index not found, fall back to common indices
+        if (bDureeHeureIndex < 0)
+        {
+            Log.Warning("ExtractDailyTimesFromSeconds: BDureeHeure type not found in string table, trying fallback");
+            bDureeHeureIndex = 15; // Common default
+        }
+
+        // Find all "{typeIndex},0,{number}" patterns (BDureeHeure type with seconds value)
+        var pattern = new Regex($@"{bDureeHeureIndex},0,(\d+)");
         var matches = pattern.Matches(rawData);
 
         var secondsValues = new List<int>();
@@ -146,27 +173,76 @@ public partial class SemainePresenceParser
             }
         }
 
+        Log.Debug("ExtractDailyTimesFromSeconds: Found {Count} time values", secondsValues.Count);
+
         // Each day has 5 values: [val0, val1, val2, worked, expected]
         // Find the first block of 5 values where the last 2 look like daily hours
         const int valuesPerDay = 5;
 
         // Find start index - look for pattern where val[3] and val[4] are reasonable daily times
         int startIndex = 0;
+        bool foundStart = false;
         for (int i = 0; i <= secondsValues.Count - valuesPerDay; i++)
         {
             var potentialWorked = secondsValues[i + 3];
             var potentialExpected = secondsValues[i + 4];
 
-            // Expected time should be around 7 hours (25200 seconds) or 0 for weekends
+            // Expected time should be a typical work day: 0 for weekends, or 5-10 hours for work days
+            // Common values: 0, 25200 (7h), 27000 (7.5h), 28800 (8h), etc.
             // Also check that first 3 values are small (usually 0)
-            if ((potentialExpected == 25200 || potentialExpected == 0) &&
+            var isReasonableExpected = potentialExpected == 0 ||
+                (potentialExpected >= 18000 && potentialExpected <= 36000); // 5-10 hours
+
+            if (isReasonableExpected &&
                 potentialWorked >= 0 && potentialWorked <= 50400 &&
                 secondsValues[i] <= 1000 && secondsValues[i + 1] <= 1000 && secondsValues[i + 2] <= 1000)
             {
                 startIndex = i;
+                foundStart = true;
                 break;
             }
         }
+
+        // If no valid start found, try a fallback: look for any block where val[4] is non-zero
+        // This handles cases where expected time values are unusual
+        if (!foundStart)
+        {
+            for (int i = 0; i <= secondsValues.Count - (valuesPerDay * 7); i++)
+            {
+                // Check if there's a consistent pattern of 7 days with 5 values each
+                var hasValidPattern = true;
+                var nonZeroExpectedCount = 0;
+
+                for (int day = 0; day < 7 && hasValidPattern; day++)
+                {
+                    var idx = i + (day * valuesPerDay);
+                    var worked = secondsValues[idx + 3];
+                    var expected = secondsValues[idx + 4];
+
+                    // Worked and expected should be reasonable
+                    if (worked < 0 || worked > 86400 || expected < 0 || expected > 86400)
+                    {
+                        hasValidPattern = false;
+                    }
+
+                    if (expected > 0)
+                    {
+                        nonZeroExpectedCount++;
+                    }
+                }
+
+                // Valid pattern: at least some days have non-zero expected time
+                if (hasValidPattern && nonZeroExpectedCount >= 3)
+                {
+                    startIndex = i;
+                    Log.Debug("ExtractDailyTimesFromSeconds: Found start via fallback at index {Index}", startIndex);
+                    break;
+                }
+            }
+        }
+
+        Log.Debug("ExtractDailyTimesFromSeconds: Using startIndex={StartIndex}, foundStart={FoundStart}, totalValues={Count}",
+            startIndex, foundStart, secondsValues.Count);
 
         // Extract 7 days of data
         for (int day = 0; day < 7; day++)
@@ -193,6 +269,12 @@ public partial class SemainePresenceParser
                 dailyTimes.Add((0, 0));
             }
         }
+
+        // Log the extracted daily times for debugging
+        var totalWorked = dailyTimes.Sum(d => d.Item1);
+        var totalExpected = dailyTimes.Sum(d => d.Item2);
+        Log.Debug("ExtractDailyTimesFromSeconds: Extracted {Days} days, totalWorked={Worked}s ({WorkedH:F1}h), totalExpected={Expected}s ({ExpectedH:F1}h)",
+            dailyTimes.Count, totalWorked, totalWorked / 3600.0, totalExpected, totalExpected / 3600.0);
 
         return dailyTimes;
     }
@@ -363,9 +445,6 @@ public partial class SemainePresenceParser
 
         return closest;
     }
-
-    [GeneratedRegex(@"15,0,(\d+)")]
-    private static partial Regex TimeSecondsPattern();
 
     [GeneratedRegex(@",(\d+)")]
     private static partial Regex BadgeTimePattern();
