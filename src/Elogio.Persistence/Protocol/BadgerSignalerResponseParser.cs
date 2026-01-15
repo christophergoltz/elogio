@@ -85,7 +85,7 @@ public class BadgerSignalerResponseParser
                 continue;
             }
 
-            // Message contains time info
+            // Message contains time info or error messages
             if (str.Contains("Buchung") || str.Contains("Kommen") || str.Contains("Gehen"))
             {
                 punchMessage = str;
@@ -97,6 +97,9 @@ public class BadgerSignalerResponseParser
             }
         }
 
+        // Check for error messages (punch rejected by server)
+        var isError = IsErrorMessage(punchMessage);
+
         // Parse punch type from message
         var punchType = PunchResultDto.ParsePunchType(punchMessage);
 
@@ -105,12 +108,31 @@ public class BadgerSignalerResponseParser
 
         return new PunchResultDto
         {
-            Success = true,
+            Success = !isError,
             Type = punchType,
             Timestamp = timestamp,
             Date = DateOnly.FromDateTime(DateTime.Today),
             Message = punchMessage,
-            Label = label
+            Label = isError ? null : label,
+            Error = isError ? punchMessage : null
         };
+    }
+
+    /// <summary>
+    /// Check if the message indicates an error (punch rejected).
+    /// </summary>
+    private static bool IsErrorMessage(string? message)
+    {
+        if (string.IsNullOrEmpty(message))
+        {
+            return false;
+        }
+
+        // Known error patterns (German)
+        return message.Contains("zu nah aufeinander") ||
+               message.Contains("mindestens") ||
+               message.Contains("nicht möglich") ||
+               message.Contains("nicht erlaubt") ||
+               message.Contains("Fehler");
     }
 }

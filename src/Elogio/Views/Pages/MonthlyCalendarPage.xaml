@@ -9,7 +9,7 @@
       mc:Ignorable="d"
       d:DesignHeight="700" d:DesignWidth="900"
       Title="Monthly Calendar"
-      Loaded="Page_Loaded">
+      Loaded="Page_Loaded" d:DataContext="{d:DesignInstance vm:MonthlyCalendarViewModel}">
 
     <Page.Resources>
         <!-- Day cell state to background color -->
@@ -304,22 +304,22 @@
                 </Grid.ColumnDefinitions>
 
                 <StackPanel Grid.Column="0" HorizontalAlignment="Center">
-                    <TextBlock Text="Worked"
-                               FontSize="12"
-                               Foreground="{ui:ThemeResource TextFillColorSecondaryBrush}"
-                               HorizontalAlignment="Center" />
-                    <TextBlock Text="{Binding TotalWorkedDisplay}"
-                               FontSize="20"
-                               FontWeight="SemiBold"
-                               HorizontalAlignment="Center" />
-                </StackPanel>
-
-                <StackPanel Grid.Column="1" HorizontalAlignment="Center">
                     <TextBlock Text="Expected"
                                FontSize="12"
                                Foreground="{ui:ThemeResource TextFillColorSecondaryBrush}"
                                HorizontalAlignment="Center" />
                     <TextBlock Text="{Binding TotalExpectedDisplay}"
+                               FontSize="20"
+                               FontWeight="SemiBold"
+                               HorizontalAlignment="Center" />
+                </StackPanel>
+                
+                <StackPanel Grid.Column="1" HorizontalAlignment="Center">
+                    <TextBlock Text="Worked"
+                               FontSize="12"
+                               Foreground="{ui:ThemeResource TextFillColorSecondaryBrush}"
+                               HorizontalAlignment="Center" />
+                    <TextBlock Text="{Binding TotalWorkedDisplay}"
                                FontSize="20"
                                FontWeight="SemiBold"
                                HorizontalAlignment="Center" />
