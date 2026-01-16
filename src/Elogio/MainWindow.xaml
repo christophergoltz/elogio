@@ -280,7 +280,8 @@
                     <ui:ProgressRing IsIndeterminate="True"
                                      Width="40" Height="40"
                                      Margin="0,24,0,0" />
-                    <TextBlock Text="Connecting..."
+                    <TextBlock x:Name="LoadingStatusText"
+                               Text="Connecting..."
                                FontSize="14"
                                HorizontalAlignment="Center"
                                Margin="0,16,0,0"

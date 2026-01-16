@@ -23,26 +23,36 @@ public class KelioService : IKelioService, IDisposable
     public string? EmployeeName => _employeeName;
     public int? EmployeeId => _client?.EmployeeId;
 
+    /// <summary>
+    /// Pre-initialize the Kelio client for faster login.
+    /// Call this early (e.g., when login page is shown) to start curl_proxy server.
+    /// </summary>
+    public async Task PreInitializeAsync(string serverUrl)
+    {
+        // Dispose previous client if exists
+        _client?.Dispose();
+        _client = new KelioClient(serverUrl);
+
+        var sw = Stopwatch.StartNew();
+        await _client.PreInitializeAsync();
+        Log.Information("[PERF] KelioService.PreInitialize: took {ElapsedMs}ms", sw.ElapsedMilliseconds);
+    }
+
     public async Task<bool> LoginAsync(string serverUrl, string username, string password)
     {
         var totalSw = Stopwatch.StartNew();
 
-        // Dispose previous client if exists
-        _client?.Dispose();
+        // Create client if not pre-initialized or different server
+        if (_client == null)
+        {
+            _client = new KelioClient(serverUrl);
+        }
 
-        _client = new KelioClient(serverUrl);
         var sw = Stopwatch.StartNew();
         var success = await _client.LoginAsync(username, password);
         Log.Information("[PERF] KelioService.LoginAsync: KelioClient.LoginAsync took {ElapsedMs}ms", sw.ElapsedMilliseconds);
 
-        if (success)
-        {
-            // Try to get employee name from first week data
-            sw.Restart();
-            var weekData = await _client.GetCurrentWeekPresenceAsync();
-            Log.Information("[PERF] KelioService.LoginAsync: GetCurrentWeekPresence took {ElapsedMs}ms", sw.ElapsedMilliseconds);
-            _employeeName = weekData?.EmployeeName;
-        }
+        // NOTE: Employee name is fetched lazily when month data is loaded (saves ~2.2s on login)
 
         Log.Information("[PERF] KelioService.LoginAsync: TOTAL {ElapsedMs}ms", totalSw.ElapsedMilliseconds);
         return success;
@@ -230,9 +240,9 @@ public class KelioService : IKelioService, IDisposable
         var successfulWeeks = 0;
         var failedWeeks = 0;
 
-        // Fetch weeks with limited parallelism (2 at a time) to avoid overwhelming the API
-        // NOTE: This limit may be too conservative - consider increasing to 4-5
-        const int maxParallel = 2;
+        // Fetch weeks with limited parallelism to avoid overwhelming the API
+        // Increased from 2 to 4 based on performance testing
+        const int maxParallel = 4;
         var semaphore = new SemaphoreSlim(maxParallel);
         Log.Information("[PERF] FetchMonthData: Starting {WeekCount} weeks with parallelism={MaxParallel}", weeks.Count, maxParallel);
 

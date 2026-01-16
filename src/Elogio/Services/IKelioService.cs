@@ -24,6 +24,12 @@ public interface IKelioService
     int? EmployeeId { get; }
 
     /// <summary>
+    /// Pre-initialize the Kelio client for faster login.
+    /// Call this early (e.g., when login page is shown) to start curl_proxy server.
+    /// </summary>
+    Task PreInitializeAsync(string serverUrl);
+
+    /// <summary>
     /// Authenticate with Kelio server.
     /// </summary>
     Task<bool> LoginAsync(string serverUrl, string username, string password);

@@ -61,15 +61,24 @@ public partial class MainWindow
     }
     
     /// <summary>
-    /// Show the loading overlay.
+    /// Show the loading overlay with optional status text.
     /// </summary>
-    public void ShowLoading()
+    public void ShowLoading(string status = "Connecting...")
     {
+        LoadingStatusText.Text = status;
         LoadingOverlay.Visibility = Visibility.Visible;
         LoginFrame.Visibility = Visibility.Collapsed;
         MainLayout.Visibility = Visibility.Collapsed;
     }
-    
+
+    /// <summary>
+    /// Update the loading status text.
+    /// </summary>
+    public void UpdateLoadingStatus(string status)
+    {
+        LoadingStatusText.Text = status;
+    }
+
     /// <summary>
     /// Hide the loading overlay.
     /// </summary>

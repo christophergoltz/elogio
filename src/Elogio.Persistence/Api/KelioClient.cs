@@ -4,6 +4,7 @@ using System.Text;
 using System.Text.RegularExpressions;
 using Elogio.Persistence.Dto;
 using Elogio.Persistence.Protocol;
+using Elogio.Persistence.Services;
 using Refit;
 using Serilog;
 
@@ -43,6 +44,7 @@ public partial class KelioClient : IDisposable
     private int _realEmployeeId; // ACTUAL employee ID from getParametreIntranet - used for absence requests
     private bool _isAuthenticated;
     private bool _calendarAppInitialized; // Whether the absence calendar app has been launched
+    private bool _calendarNavigationPrefetched; // Whether Phase1 navigation was done during login
 
     /// <summary>
     /// If true, use curl_cffi for BWP requests to bypass TLS fingerprinting.
@@ -127,29 +129,83 @@ public partial class KelioClient : IDisposable
     /// Authenticate with the Kelio server.
     /// IMPORTANT: All requests use curl_cffi to maintain consistent TLS fingerprint.
     /// </summary>
+    /// <summary>
+    /// Pre-initialize the curl_proxy server AND pre-fetch login page for faster login.
+    /// Call this early (e.g., when login page is shown) to avoid delays during actual login.
+    /// </summary>
+    public async Task PreInitializeAsync()
+    {
+        var totalSw = Stopwatch.StartNew();
+
+        // Start the server
+        var serverSw = Stopwatch.StartNew();
+        await _curlClient.InitializeAsync(enableServerMode: true);
+        var serverMs = serverSw.ElapsedMilliseconds;
+
+        // Pre-fetch the login page to get CSRF token (runs in parallel with nothing, but warms connection)
+        var loginPageSw = Stopwatch.StartNew();
+        try
+        {
+            var loginPageResponse = await _curlClient.GetAsync($"{_baseUrl}/open/login");
+            if (loginPageResponse.IsSuccessStatusCode || loginPageResponse.StatusCode == 401)
+            {
+                _sessionCookie = ExtractSessionCookie(loginPageResponse.Headers);
+                _csrfToken = ExtractCsrfToken(loginPageResponse.Body);
+                Log.Information("[PERF] PreInitialize: Pre-fetched login page, got CSRF token");
+            }
+        }
+        catch (Exception ex)
+        {
+            // Non-critical - login will fetch it again if needed
+            Log.Warning(ex, "[PERF] PreInitialize: Failed to pre-fetch login page");
+        }
+        var loginPageMs = loginPageSw.ElapsedMilliseconds;
+
+        Log.Information("[PERF] PreInitialize: Server={ServerMs}ms, LoginPage={LoginPageMs}ms, Total={TotalMs}ms (ServerMode={ServerMode})",
+            serverMs, loginPageMs, totalSw.ElapsedMilliseconds, _curlClient.IsServerModeEnabled);
+    }
+
     public async Task<bool> LoginAsync(string username, string password)
     {
         var totalSw = Stopwatch.StartNew();
+        var sw = new Stopwatch(); // Reused for timing individual steps
         try
         {
-            // 1. Get login page for CSRF token via curl_cffi (Chrome TLS fingerprint)
-            await LogDebugAsync("[curl_cffi] Getting login page...");
-            var sw = Stopwatch.StartNew();
-            var loginPageResponse = await _curlClient.GetAsync($"{_baseUrl}/open/login");
-            Log.Information("[PERF] LoginAsync: GetLoginPage took {ElapsedMs}ms", sw.ElapsedMilliseconds);
-
-            if (!loginPageResponse.IsSuccessStatusCode && loginPageResponse.StatusCode != 401)
+            // Initialize curl_proxy server mode if not already done
+            // If PreInitializeAsync was called earlier, this is a no-op
+            if (!_curlClient.IsServerModeEnabled)
             {
-                throw new HttpRequestException($"Failed to get login page: {loginPageResponse.StatusCode}");
+                var initSw = Stopwatch.StartNew();
+                await _curlClient.InitializeAsync(enableServerMode: true);
+                Log.Information("[PERF] LoginAsync: CurlClient.InitializeAsync took {ElapsedMs}ms (ServerMode={ServerMode})",
+                    initSw.ElapsedMilliseconds, _curlClient.IsServerModeEnabled);
             }
 
-            // Extract session cookie from response
-            await LogDebugAsync($"[curl_cffi] Login page response headers: {string.Join(", ", loginPageResponse.Headers.Select(h => $"{h.Key}={h.Value}"))}");
-            _sessionCookie = ExtractSessionCookie(loginPageResponse.Headers);
-            await LogDebugAsync($"[curl_cffi] Got session cookie: {_sessionCookie}");
+            // 1. Get login page for CSRF token (skip if already pre-fetched)
+            if (string.IsNullOrEmpty(_csrfToken))
+            {
+                await LogDebugAsync("[curl_cffi] Getting login page...");
+                sw.Restart();
+                var loginPageResponse = await _curlClient.GetAsync($"{_baseUrl}/open/login");
+                Log.Information("[PERF] LoginAsync: GetLoginPage took {ElapsedMs}ms", sw.ElapsedMilliseconds);
 
-            _csrfToken = ExtractCsrfToken(loginPageResponse.Body);
-            await LogDebugAsync($"[curl_cffi] Got CSRF token: {_csrfToken}");
+                if (!loginPageResponse.IsSuccessStatusCode && loginPageResponse.StatusCode != 401)
+                {
+                    throw new HttpRequestException($"Failed to get login page: {loginPageResponse.StatusCode}");
+                }
+
+                // Extract session cookie from response
+                await LogDebugAsync($"[curl_cffi] Login page response headers: {string.Join(", ", loginPageResponse.Headers.Select(h => $"{h.Key}={h.Value}"))}");
+                _sessionCookie = ExtractSessionCookie(loginPageResponse.Headers);
+                await LogDebugAsync($"[curl_cffi] Got session cookie: {_sessionCookie}");
+
+                _csrfToken = ExtractCsrfToken(loginPageResponse.Body);
+                await LogDebugAsync($"[curl_cffi] Got CSRF token: {_csrfToken}");
+            }
+            else
+            {
+                Log.Information("[PERF] LoginAsync: Using pre-fetched CSRF token (skipped GetLoginPage)");
+            }
 
             if (string.IsNullOrEmpty(_csrfToken))
             {
@@ -198,9 +254,14 @@ public partial class KelioClient : IDisposable
 
             if (_isAuthenticated)
             {
-                // Get the session ID from portail.jsp (server-provided)
+                // OPTIMIZED: Start GWT file downloads in parallel with GetSessionIdFromPortal
+                // GWT files only need auth cookie, not the BWP session ID
                 sw.Restart();
-                _sessionId = await GetSessionIdFromPortalViaCurlAsync();
+                var gwtPreloadTask = PreloadGwtFilesAsync();
+
+                // Get the session ID from portail.jsp (server-provided)
+                var sessionIdTask = GetSessionIdFromPortalOnlyAsync();
+                _sessionId = await sessionIdTask;
                 Log.Information("[PERF] LoginAsync: GetSessionIdFromPortal took {ElapsedMs}ms", sw.ElapsedMilliseconds);
 
                 if (string.IsNullOrEmpty(_sessionId))
@@ -208,20 +269,13 @@ public partial class KelioClient : IDisposable
                     throw new InvalidOperationException("Could not extract session ID from portal page");
                 }
 
-                // Initialize BWP session with connect call
-                sw.Restart();
-                await ConnectBwpSessionAsync();
-                Log.Information("[PERF] LoginAsync: ConnectBwpSession took {ElapsedMs}ms", sw.ElapsedMilliseconds);
+                // Wait for GWT preload to finish (should already be done or almost done)
+                await gwtPreloadTask;
 
-                // Push connect via curl_cffi
+                // Now run BWP session initialization (needs session ID)
                 sw.Restart();
-                await ConnectPushViaCurlAsync();
-                Log.Information("[PERF] LoginAsync: ConnectPush took {ElapsedMs}ms", sw.ElapsedMilliseconds);
-
-                // Call getHeureServeur to complete initialization
-                sw.Restart();
-                await InitializeServerStateAsync();
-                Log.Information("[PERF] LoginAsync: InitializeServerState took {ElapsedMs}ms", sw.ElapsedMilliseconds);
+                await InitializeBwpSessionAsync();
+                Log.Information("[PERF] LoginAsync: BwpSessionInit took {ElapsedMs}ms", sw.ElapsedMilliseconds);
             }
 
             totalSw.Stop();
@@ -284,6 +338,149 @@ public partial class KelioClient : IDisposable
         }
 
         return sessionId;
+    }
+
+    /// <summary>
+    /// Get session ID from portal page WITHOUT loading GWT files.
+    /// GWT files are loaded in parallel phase for better performance.
+    /// </summary>
+    private async Task<string?> GetSessionIdFromPortalOnlyAsync()
+    {
+        await LogDebugAsync("[curl_cffi] Getting portal page (fast)...");
+        var portalResponse = await _curlClient.GetAsync(
+            $"{_baseUrl}/open/bwt/portail.jsp",
+            cookies: _sessionCookie);
+
+        var newCookie = ExtractSessionCookie(portalResponse.Headers);
+        if (!string.IsNullOrEmpty(newCookie))
+        {
+            _sessionCookie = newCookie;
+            await LogDebugAsync($"[curl_cffi] Portal updated session cookie: {_sessionCookie}");
+        }
+
+        var match = CsrfTokenDivRegex().Match(portalResponse.Body);
+        var sessionId = match.Success ? match.Groups[1].Value : null;
+        await LogDebugAsync($"[curl_cffi] Portal session ID extracted: {sessionId}");
+
+        return sessionId;
+    }
+
+    /// <summary>
+    /// Preload GWT files in parallel. These only need auth cookie, not BWP session ID.
+    /// Called early to overlap with GetSessionIdFromPortal.
+    /// </summary>
+    private async Task PreloadGwtFilesAsync()
+    {
+        var sw = Stopwatch.StartNew();
+
+        var tasks = new List<Task>
+        {
+            // Portal GWT files
+            _curlClient.GetAsync($"{_baseUrl}/open/bwt/portail/portail.nocache.js", cookies: _sessionCookie),
+            _curlClient.GetAsync($"{_baseUrl}/open/bwt/portail/85D2B992F6111BC9BF615C4D657B05CC.cache.js", cookies: _sessionCookie),
+
+            // App launcher JSP (triggers GWT module loading)
+            _curlClient.GetAsync(
+                $"{_baseUrl}/open/bwt/appLauncher.jsp?app=app_declaration_desktop&appParams=idMenuDeclaration=1",
+                cookies: _sessionCookie),
+
+            // Declaration app GWT files
+            _curlClient.GetAsync($"{_baseUrl}/open/bwt/app_declaration_desktop/app_declaration_desktop.nocache.js", cookies: _sessionCookie),
+            _curlClient.GetAsync($"{_baseUrl}/open/bwt/app_declaration_desktop/1A313ED29AA1E74DD777D2CCF3248188.cache.js", cookies: _sessionCookie)
+        };
+
+        try
+        {
+            await Task.WhenAll(tasks);
+        }
+        catch (Exception ex)
+        {
+            Log.Warning(ex, "[PERF] PreloadGwtFiles: some files failed to preload");
+        }
+
+        Log.Information("[PERF] PreloadGwtFiles: completed in {ElapsedMs}ms", sw.ElapsedMilliseconds);
+    }
+
+    /// <summary>
+    /// Initialize BWP session - requires session ID from portal page.
+    /// Runs ConnectBwp, ConnectPush, GlobalConnect in parallel.
+    /// Calendar prefetch runs in background (non-blocking) via BackgroundTaskManager.
+    /// </summary>
+    private async Task InitializeBwpSessionAsync()
+    {
+        var sw = Stopwatch.StartNew();
+
+        // Start calendar prefetch in background (fire-and-forget, non-blocking)
+        // This runs independently and doesn't delay login completion
+        BackgroundTaskManager.Instance.StartCalendarPrefetch(PrefetchCalendarNavigationAsync);
+
+        // These all need the session ID - run in parallel
+        var tasks = new List<Task>
+        {
+            // BWP session connect (PortailBWTService)
+            ConnectBwpSessionAsync(),
+
+            // Push connect
+            ConnectPushViaCurlAsync(),
+
+            // GlobalBWTService connect (gets employee ID) - CRITICAL
+            GlobalBwtServiceConnectAsync()
+            // Calendar prefetch removed from here - now runs via BackgroundTaskManager
+        };
+
+        try
+        {
+            await Task.WhenAll(tasks);  // Only waits for BWP tasks, not calendar prefetch!
+        }
+        catch (Exception ex)
+        {
+            Log.Warning(ex, "[PERF] InitializeBwpSession: some tasks failed");
+        }
+
+        Log.Information("[PERF] InitializeBwpSession: completed in {ElapsedMs}ms, EmployeeId={EmployeeId}",
+            sw.ElapsedMilliseconds, _employeeId);
+    }
+
+    /// <summary>
+    /// Prefetch calendar navigation (Phase1 of InitializeCalendarAppAsync).
+    /// This only needs auth cookie and can run in parallel with BWP session init.
+    /// Running this during login saves ~4s when user opens calendar view.
+    /// </summary>
+    private async Task PrefetchCalendarNavigationAsync()
+    {
+        if (_calendarNavigationPrefetched)
+            return;
+
+        var sw = Stopwatch.StartNew();
+
+        try
+        {
+            // Step 0: Navigate to intranet section
+            var intranetResponse = await _curlClient.GetAsync(
+                $"{_baseUrl}/open/homepage?ACTION=intranet&asked=6&header=0",
+                cookies: _sessionCookie);
+
+            var newCookie = ExtractSessionCookie(intranetResponse.Headers);
+            if (!string.IsNullOrEmpty(newCookie))
+                _sessionCookie = newCookie;
+
+            // Step 1: Load JSP
+            var jspResponse = await _curlClient.GetAsync(
+                $"{_baseUrl}/open/bwt/intranet_calendrier_absence.jsp",
+                cookies: _sessionCookie);
+
+            newCookie = ExtractSessionCookie(jspResponse.Headers);
+            if (!string.IsNullOrEmpty(newCookie))
+                _sessionCookie = newCookie;
+
+            _calendarNavigationPrefetched = true;
+            Log.Information("[PERF] PrefetchCalendarNavigation: completed in {ElapsedMs}ms", sw.ElapsedMilliseconds);
+        }
+        catch (Exception ex)
+        {
+            Log.Warning(ex, "[PERF] PrefetchCalendarNavigation: failed after {ElapsedMs}ms", sw.ElapsedMilliseconds);
+            // Don't throw - this is an optimization, not critical
+        }
     }
 
     /// <summary>
@@ -671,7 +868,7 @@ public partial class KelioClient : IDisposable
     /// <summary>
     /// Initialize the calendar/absence app before making absence-related API calls.
     /// Based on HAR capture analysis: load the intranet_calendrier_absence.jsp page and GWT files.
-    /// NOTE: Currently 8 SEQUENTIAL steps - major performance bottleneck!
+    /// OPTIMIZED: Phase1 is prefetched in background during login via BackgroundTaskManager.
     /// </summary>
     private async Task InitializeCalendarAppAsync()
     {
@@ -681,167 +878,123 @@ public partial class KelioClient : IDisposable
         var totalSw = Stopwatch.StartNew();
         try
         {
-            await LogDebugAsync("InitializeCalendarApp - starting initialization");
+            await LogDebugAsync("InitializeCalendarApp - starting initialization (OPTIMIZED v3)");
 
-            // Step 0: Navigate to intranet section first (required per HAR capture)
-            // The browser navigates to homepage?ACTION=intranet before the calendar JSP
-            try
+            // Wait briefly for background prefetch to complete (if running)
+            // This gives the background task a chance to finish before we check the flag
+            if (!_calendarNavigationPrefetched)
             {
-                var sw = Stopwatch.StartNew();
-                await LogDebugAsync("InitializeCalendarApp - navigating to intranet section");
-                var intranetResponse = await _curlClient.GetAsync(
-                    $"{_baseUrl}/open/homepage?ACTION=intranet&asked=6&header=0",
-                    cookies: _sessionCookie);
-                Log.Information("[PERF] InitCalendarApp Step0: Navigate to intranet took {ElapsedMs}ms", sw.ElapsedMilliseconds);
-                await LogDebugAsync($"InitializeCalendarApp - intranet navigation status: {intranetResponse.StatusCode}");
-
-                var newCookie = ExtractSessionCookie(intranetResponse.Headers);
-                if (!string.IsNullOrEmpty(newCookie))
+                var prefetchDone = await BackgroundTaskManager.Instance.WaitForCalendarPrefetchAsync(3000);
+                if (prefetchDone && _calendarNavigationPrefetched)
                 {
-                    _sessionCookie = newCookie;
-                    await LogDebugAsync("InitializeCalendarApp - updated cookie from intranet navigation");
+                    Log.Information("[PERF] InitCalendarApp: Background prefetch completed just in time");
                 }
             }
-            catch (Exception ex)
+
+            // ============================================
+            // PHASE 1: Navigation setup
+            // OPTIMIZATION: Usually prefetched in background during login via BackgroundTaskManager
+            // ============================================
+            var phase1Sw = Stopwatch.StartNew();
+
+            if (_calendarNavigationPrefetched)
             {
-                await LogDebugAsync($"InitializeCalendarApp - intranet navigation warning: {ex.Message}");
+                Log.Information("[PERF] InitCalendarApp Phase1 (navigation): SKIPPED - already prefetched during login");
             }
-
-            // Step 1: Load the intranet_calendrier_absence.jsp page
-            // This sets up the server-side session state for the calendar module
-            try
+            else
             {
-                var sw = Stopwatch.StartNew();
-                await LogDebugAsync("InitializeCalendarApp - loading intranet_calendrier_absence.jsp");
-                var jspResponse = await _curlClient.GetAsync(
-                    $"{_baseUrl}/open/bwt/intranet_calendrier_absence.jsp",
-                    cookies: _sessionCookie);
-                Log.Information("[PERF] InitCalendarApp Step1: Load JSP took {ElapsedMs}ms", sw.ElapsedMilliseconds);
-                await LogDebugAsync($"InitializeCalendarApp - JSP page status: {jspResponse.StatusCode}");
+                // Fallback: run Phase1 now if not prefetched
+                await LogDebugAsync("InitializeCalendarApp - Phase1 not prefetched, running now");
 
-                var newCookie = ExtractSessionCookie(jspResponse.Headers);
-                if (!string.IsNullOrEmpty(newCookie))
+                // Step 0: Navigate to intranet section first
+                try
                 {
-                    _sessionCookie = newCookie;
-                    await LogDebugAsync("InitializeCalendarApp - updated cookie from JSP");
+                    var intranetResponse = await _curlClient.GetAsync(
+                        $"{_baseUrl}/open/homepage?ACTION=intranet&asked=6&header=0",
+                        cookies: _sessionCookie);
+
+                    var newCookie = ExtractSessionCookie(intranetResponse.Headers);
+                    if (!string.IsNullOrEmpty(newCookie))
+                        _sessionCookie = newCookie;
                 }
+                catch (Exception ex)
+                {
+                    await LogDebugAsync($"InitializeCalendarApp - intranet navigation warning: {ex.Message}");
+                }
+
+                // Step 1: Load JSP (must be after intranet navigation)
+                try
+                {
+                    var jspResponse = await _curlClient.GetAsync(
+                        $"{_baseUrl}/open/bwt/intranet_calendrier_absence.jsp",
+                        cookies: _sessionCookie);
+
+                    var newCookie = ExtractSessionCookie(jspResponse.Headers);
+                    if (!string.IsNullOrEmpty(newCookie))
+                        _sessionCookie = newCookie;
+                }
+                catch (Exception ex)
+                {
+                    await LogDebugAsync($"InitializeCalendarApp - JSP page warning: {ex.Message}");
+                }
+
+                Log.Information("[PERF] InitCalendarApp Phase1 (navigation): {ElapsedMs}ms", phase1Sw.ElapsedMilliseconds);
+            }
+
+            // ============================================
+            // PHASE 2: All independent operations in parallel
+            // ============================================
+            var phase2Sw = Stopwatch.StartNew();
+
+            var phase2Tasks = new List<Task>
+            {
+                // GWT files
+                _curlClient.GetAsync($"{_baseUrl}/open/bwt/intranet_calendrier_absence/intranet_calendrier_absence.nocache.js", cookies: _sessionCookie),
+                _curlClient.GetAsync($"{_baseUrl}/open/bwt/intranet_calendrier_absence/B774D9023F6AE5125A0446A2F6C1BC19.cache.js", cookies: _sessionCookie),
+
+                // Calendar GlobalConnect
+                CalendarGlobalConnectAsync(),
+
+                // Global presentation model
+                CalendarGetGlobalPresentationModelAsync(),
+
+                // Parametre intranet
+                CalendarGetParametreIntranetAsync(),
+
+                // Calendar translations
+                LoadCalendarTranslationsAsync()
+            };
+
+            try
+            {
+                await Task.WhenAll(phase2Tasks);
             }
             catch (Exception ex)
             {
-                await LogDebugAsync($"InitializeCalendarApp - JSP page warning: {ex.Message}");
+                Log.Warning(ex, "[PERF] InitCalendarApp Phase2: some tasks failed");
             }
 
-            // Step 2: Load the GWT nocache.js file
-            try
-            {
-                var sw = Stopwatch.StartNew();
-                await LogDebugAsync("InitializeCalendarApp - loading GWT nocache.js");
-                await _curlClient.GetAsync(
-                    $"{_baseUrl}/open/bwt/intranet_calendrier_absence/intranet_calendrier_absence.nocache.js",
-                    cookies: _sessionCookie);
-                Log.Information("[PERF] InitCalendarApp Step2: Load nocache.js took {ElapsedMs}ms", sw.ElapsedMilliseconds);
-                await LogDebugAsync("InitializeCalendarApp - loaded nocache.js");
-            }
-            catch (Exception ex)
-            {
-                await LogDebugAsync($"InitializeCalendarApp - nocache.js warning: {ex.Message}");
-            }
+            Log.Information("[PERF] InitCalendarApp Phase2 (parallel): {ElapsedMs}ms", phase2Sw.ElapsedMilliseconds);
 
-            // Step 3: Load the GWT cache.js file (hash from HAR capture)
-            try
-            {
-                var sw = Stopwatch.StartNew();
-                await LogDebugAsync("InitializeCalendarApp - loading GWT cache.js");
-                await _curlClient.GetAsync(
-                    $"{_baseUrl}/open/bwt/intranet_calendrier_absence/B774D9023F6AE5125A0446A2F6C1BC19.cache.js",
-                    cookies: _sessionCookie);
-                Log.Information("[PERF] InitCalendarApp Step3: Load cache.js took {ElapsedMs}ms", sw.ElapsedMilliseconds);
-                await LogDebugAsync("InitializeCalendarApp - loaded cache.js");
-            }
-            catch (Exception ex)
-            {
-                await LogDebugAsync($"InitializeCalendarApp - cache.js warning: {ex.Message}");
-            }
+            // ============================================
+            // PHASE 3: Final presentation model (must be last)
+            // ============================================
+            var phase3Sw = Stopwatch.StartNew();
 
-            // Step 4: Make GlobalBWTService.connect request for calendar app
-            // This activates the calendar module for the session (uses Short=16 vs 21 for portal)
             try
             {
-                var sw = Stopwatch.StartNew();
-                await LogDebugAsync("InitializeCalendarApp - making GlobalBWTService connect for calendar");
-                await CalendarGlobalConnectAsync();
-                Log.Information("[PERF] InitCalendarApp Step4: CalendarGlobalConnect took {ElapsedMs}ms", sw.ElapsedMilliseconds);
-                await LogDebugAsync("InitializeCalendarApp - GlobalBWTService connect complete");
-            }
-            catch (Exception ex)
-            {
-                await LogDebugAsync($"InitializeCalendarApp - GlobalBWTService connect warning: {ex.Message}");
-            }
-
-            // Step 5: Call getPresentationModel for GlobalPresentationModel
-            // HAR shows this is called before the calendar-specific presentation model
-            try
-            {
-                var sw = Stopwatch.StartNew();
-                await LogDebugAsync("InitializeCalendarApp - calling getPresentationModel for GlobalPresentationModel");
-                await CalendarGetGlobalPresentationModelAsync();
-                Log.Information("[PERF] InitCalendarApp Step5: GetGlobalPresentationModel took {ElapsedMs}ms", sw.ElapsedMilliseconds);
-                await LogDebugAsync("InitializeCalendarApp - GlobalPresentationModel complete");
-            }
-            catch (Exception ex)
-            {
-                await LogDebugAsync($"InitializeCalendarApp - GlobalPresentationModel warning: {ex.Message}");
-            }
-
-            // Step 6: Call getParametreIntranet
-            // HAR shows this is called after GlobalPresentationModel, before translations
-            try
-            {
-                var sw = Stopwatch.StartNew();
-                await LogDebugAsync("InitializeCalendarApp - calling getParametreIntranet");
-                await CalendarGetParametreIntranetAsync();
-                Log.Information("[PERF] InitCalendarApp Step6: GetParametreIntranet took {ElapsedMs}ms", sw.ElapsedMilliseconds);
-                await LogDebugAsync("InitializeCalendarApp - getParametreIntranet complete");
-            }
-            catch (Exception ex)
-            {
-                await LogDebugAsync($"InitializeCalendarApp - getParametreIntranet warning: {ex.Message}");
-            }
-
-            // Step 7: Load calendar-specific translations (required for absence API)
-            // HAR capture shows browser loads "calendrier.annuel.intranet_" translations before absence request
-            try
-            {
-                var sw = Stopwatch.StartNew();
-                await LogDebugAsync("InitializeCalendarApp - loading calendar translations");
-                await LoadCalendarTranslationsAsync();
-                Log.Information("[PERF] InitCalendarApp Step7: LoadCalendarTranslations took {ElapsedMs}ms", sw.ElapsedMilliseconds);
-                await LogDebugAsync("InitializeCalendarApp - calendar translations loaded");
-            }
-            catch (Exception ex)
-            {
-                await LogDebugAsync($"InitializeCalendarApp - calendar translations warning: {ex.Message}");
-            }
-
-            // Step 8: Call getPresentationModel for CalendrierAbsencePresentationModel
-            // CRITICAL: This MUST be called before getAbsencesEtJoursFeries! (discovered from HAR analysis)
-            // This initializes the server-side state for the calendar module.
-            try
-            {
-                var sw = Stopwatch.StartNew();
-                await LogDebugAsync("InitializeCalendarApp - calling getPresentationModel for CalendrierAbsencePresentationModel");
                 await CalendarGetPresentationModelAsync();
-                Log.Information("[PERF] InitCalendarApp Step8: GetPresentationModel took {ElapsedMs}ms", sw.ElapsedMilliseconds);
-                await LogDebugAsync("InitializeCalendarApp - CalendrierAbsencePresentationModel complete");
             }
             catch (Exception ex)
             {
                 await LogDebugAsync($"InitializeCalendarApp - CalendrierAbsencePresentationModel warning: {ex.Message}");
             }
 
+            Log.Information("[PERF] InitCalendarApp Phase3 (final model): {ElapsedMs}ms", phase3Sw.ElapsedMilliseconds);
+
             _calendarAppInitialized = true;
-            Log.Information("[PERF] InitCalendarApp: TOTAL {ElapsedMs}ms (8 sequential steps)", totalSw.ElapsedMilliseconds);
-            await LogDebugAsync("InitializeCalendarApp - complete");
+            Log.Information("[PERF] InitCalendarApp: TOTAL {ElapsedMs}ms (Phase1 prefetched={Prefetched})",
+                totalSw.ElapsedMilliseconds, _calendarNavigationPrefetched);
         }
         catch (Exception ex)
         {
@@ -1182,18 +1335,32 @@ public partial class KelioClient : IDisposable
         return result;
     }
 
-    private static async Task LogDebugAsync(string message)
+    /// <summary>
+    /// Log a debug message to the HTTP log file.
+    /// OPTIMIZED: Fire-and-forget to avoid blocking the main execution flow.
+    /// </summary>
+    private static Task LogDebugAsync(string message)
     {
-        await LoggingSemaphore.WaitAsync();
-        try
+        // Fire-and-forget: queue the write operation without blocking
+        _ = Task.Run(async () =>
         {
-            var logPath = LoggingDelegatingHandler.GetLogFilePath();
-            await File.AppendAllTextAsync(logPath, $"\n[DEBUG] {DateTime.Now:HH:mm:ss} {message}\n");
-        }
-        finally
-        {
-            LoggingSemaphore.Release();
-        }
+            await LoggingSemaphore.WaitAsync();
+            try
+            {
+                var logPath = LoggingDelegatingHandler.GetLogFilePath();
+                await File.AppendAllTextAsync(logPath, $"\n[DEBUG] {DateTime.Now:HH:mm:ss} {message}\n");
+            }
+            catch
+            {
+                // Ignore logging errors - they should not affect main functionality
+            }
+            finally
+            {
+                LoggingSemaphore.Release();
+            }
+        });
+
+        return Task.CompletedTask;
     }
 
     /// <summary>
@@ -1528,6 +1695,9 @@ public partial class KelioClient : IDisposable
 
     public void Dispose()
     {
+        // Cancel any running background tasks (e.g., calendar prefetch)
+        BackgroundTaskManager.Instance.Reset();
+
         _httpClient.Dispose();
         _bwpClient.Dispose();
         _curlClient.Dispose();

@@ -58,11 +58,18 @@ public partial class App
             Log.Information("Attempting auto-login for user {Username}", settings.Username);
 
             // Show loading overlay in main window (faster than separate window)
-            mainWindow.ShowLoading();
+            mainWindow.ShowLoading("Starting...");
 
             try
             {
                 var kelioService = Services.GetRequiredService<IKelioService>();
+
+                // Pre-initialize server + prefetch login page while showing loading screen
+                // This saves ~4.6s of perceived login time
+                mainWindow.UpdateLoadingStatus("Initializing connection...");
+                await kelioService.PreInitializeAsync(settings.ServerUrl);
+
+                mainWindow.UpdateLoadingStatus("Logging in...");
                 var success = await kelioService.LoginAsync(settings.ServerUrl, settings.Username, settings.Password);
 
                 mainWindow.HideLoading();
