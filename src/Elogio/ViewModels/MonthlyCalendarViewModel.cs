@@ -77,6 +77,21 @@ public partial class MonthlyCalendarViewModel : ObservableObject
 
     public async Task InitializeAsync()
     {
+        // Start absence cache initialization in background (don't block calendar loading)
+        // This runs in parallel with LoadMonthDataAsync - the first month's absences
+        // will be fetched via GetMonthAbsencesAsync if not yet cached
+        _ = Task.Run(async () =>
+        {
+            try
+            {
+                await _kelioService.InitializeAbsenceCacheAsync();
+            }
+            catch (Exception ex)
+            {
+                Log.Warning(ex, "Background absence cache initialization failed");
+            }
+        });
+
         await LoadMonthDataAsync();
     }
 
@@ -86,6 +101,10 @@ public partial class MonthlyCalendarViewModel : ObservableObject
         Log.Information("LoadMonthDataAsync started for {Year}-{Month}", SelectedYear, SelectedMonth);
         IsLoading = true;
         ErrorMessage = null;
+
+        // Start prefetch for previous month IMMEDIATELY (fire-and-forget)
+        // This runs in parallel so when user navigates back, data is likely already cached
+        _kelioService.PrefetchAdjacentMonths(SelectedYear, SelectedMonth);
 
         try
         {
@@ -126,9 +145,8 @@ public partial class MonthlyCalendarViewModel : ObservableObject
             BuildCalendarGrid(monthData, absences);
             Log.Information("Calendar grid built with {CellCount} cells", DayCells.Count);
 
-            // Prefetch adjacent months for faster navigation
-            _kelioService.PrefetchAdjacentMonths(SelectedYear, SelectedMonth);
-            _kelioService.PrefetchAdjacentMonthAbsences(SelectedYear, SelectedMonth);
+            // Ensure at least 2 months buffer in each direction for absence data
+            _kelioService.EnsureAbsenceBuffer(SelectedYear, SelectedMonth);
         }
         catch (Exception ex)
         {

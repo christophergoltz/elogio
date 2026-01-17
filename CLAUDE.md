@@ -124,6 +124,24 @@ dotnet test --filter "FullyQualifiedName~GetWeekPresence"
 
 HTTP traffic is logged to: `%LOCALAPPDATA%\Elogio\http_log.txt`
 
+### Accessing Application Logs (for Claude)
+
+**Log location:** `C:\Users\Elonius\AppData\Local\Elogio\logs\elogio-YYYYMMDD.log`
+
+**To read the latest log (use Glob first, then Read):**
+```
+1. Glob pattern: **/Elogio/logs/*.log with path: C:\Users\Elonius\AppData\Local
+2. Read the newest file (sorted by date in filename)
+```
+
+**Example:**
+```
+Glob: C:\Users\Elonius\AppData\Local\Elogio\logs\*.log
+Read: C:\Users\Elonius\AppData\Local\Elogio\logs\elogio-20260117.log (offset: 1, limit: 200)
+```
+
+**DO NOT use PowerShell or cmd for log access** - environment variables don't expand correctly in the shell.
+
 ## Git Workflow
 
 - Christopher handles all commits (Claude has read-only git access)

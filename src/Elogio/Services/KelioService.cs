@@ -10,6 +10,12 @@ namespace Elogio.Services;
 /// </summary>
 public class KelioService : IKelioService, IDisposable
 {
+    // Prefetch configuration constants
+    private const int MinBufferMonths = 2;      // Minimum months to keep cached in each direction
+    private const int PrefetchMonths = 6;       // How many months to prefetch at once
+    private const int InitialPastMonths = 6;    // Months to load into the past on init
+    private const int InitialFutureMonths = 12; // Months to load into the future on init
+
     private KelioClient? _client;
     private string? _employeeName;
 
@@ -18,6 +24,12 @@ public class KelioService : IKelioService, IDisposable
 
     // Session-only cache for absence data
     private readonly Dictionary<(int year, int month), AbsenceCalendarDto> _absenceCache = new();
+
+    // Track the cached absence date range for smart prefetching
+    private DateOnly? _absenceCacheStart;
+    private DateOnly? _absenceCacheEnd;
+    private bool _absenceCacheInitialized;
+    private readonly object _prefetchLock = new();
 
     public bool IsAuthenticated => _client?.SessionId != null;
     public string? EmployeeName => _employeeName;
@@ -63,7 +75,16 @@ public class KelioService : IKelioService, IDisposable
         if (_client == null || !IsAuthenticated)
             return null;
 
-        return await _client.GetWeekPresenceAsync(date);
+        var weekData = await _client.GetWeekPresenceAsync(date);
+
+        // Update employee name if we got it (supports lazy loading after login)
+        if (string.IsNullOrEmpty(_employeeName) && !string.IsNullOrEmpty(weekData?.EmployeeName))
+        {
+            _employeeName = weekData.EmployeeName;
+            Log.Information("Employee name set from GetWeekPresenceAsync: {Name}", _employeeName);
+        }
+
+        return weekData;
     }
 
     public async Task<MonthData> GetMonthDataAsync(int year, int month)
@@ -75,6 +96,19 @@ public class KelioService : IKelioService, IDisposable
         {
             Log.Information("GetMonthDataAsync: Returning cached data for {Year}-{Month}", year, month);
             return cached;
+        }
+
+        // Future months have no work time data - return empty immediately without API calls
+        var today = DateOnly.FromDateTime(DateTime.Today);
+        var requestedMonth = new DateOnly(year, month, 1);
+        var currentMonth = new DateOnly(today.Year, today.Month, 1);
+
+        if (requestedMonth > currentMonth)
+        {
+            Log.Information("GetMonthDataAsync: {Year}-{Month} is in the future, returning empty data (no API call)", year, month);
+            var emptyData = new MonthData { Year = year, Month = month };
+            _monthCache[key] = emptyData;
+            return emptyData;
         }
 
         Log.Information("GetMonthDataAsync called for {Year}-{Month}, IsAuthenticated={IsAuth}",
@@ -126,6 +160,9 @@ public class KelioService : IKelioService, IDisposable
     {
         _monthCache.Clear();
         _absenceCache.Clear();
+        _absenceCacheStart = null;
+        _absenceCacheEnd = null;
+        _absenceCacheInitialized = false;
         Log.Information("Month and absence cache cleared");
     }
 
@@ -344,6 +381,241 @@ public class KelioService : IKelioService, IDisposable
         if (month == 1)
             return (year - 1, 12);
         return (year, month - 1);
+    }
+
+    private static (int year, int month) GetNextMonth(int year, int month)
+    {
+        if (month == 12)
+            return (year + 1, 1);
+        return (year, month + 1);
+    }
+
+    private static (int year, int month) AddMonths(int year, int month, int monthsToAdd)
+    {
+        var date = new DateOnly(year, month, 1).AddMonths(monthsToAdd);
+        return (date.Year, date.Month);
+    }
+
+    private static int MonthDifference(DateOnly from, DateOnly to)
+    {
+        return (to.Year - from.Year) * 12 + (to.Month - from.Month);
+    }
+
+    public async Task InitializeAbsenceCacheAsync()
+    {
+        if (_absenceCacheInitialized)
+        {
+            Log.Information("InitializeAbsenceCacheAsync: Cache already initialized");
+            return;
+        }
+
+        if (_client == null || !IsAuthenticated)
+        {
+            Log.Warning("InitializeAbsenceCacheAsync: Client not authenticated");
+            return;
+        }
+
+        var sw = Stopwatch.StartNew();
+        var today = DateOnly.FromDateTime(DateTime.Today);
+
+        // Calculate date range: today -6 months to +12 months = 19 months total
+        var startDate = new DateOnly(today.Year, today.Month, 1).AddMonths(-InitialPastMonths);
+        var endDate = new DateOnly(today.Year, today.Month, 1).AddMonths(InitialFutureMonths + 1).AddDays(-1);
+
+        Log.Information("InitializeAbsenceCacheAsync: Loading absences from {StartDate} to {EndDate} ({MonthCount} months)",
+            startDate, endDate, InitialPastMonths + InitialFutureMonths + 1);
+
+        try
+        {
+            var data = await _client.GetAbsencesAsync(startDate, endDate);
+
+            if (data != null)
+            {
+                // Split data into monthly chunks and cache each month
+                var currentMonth = startDate;
+                while (currentMonth <= endDate)
+                {
+                    var monthStart = new DateOnly(currentMonth.Year, currentMonth.Month, 1);
+                    var monthEnd = monthStart.AddMonths(1).AddDays(-1);
+
+                    // Extract days for this month
+                    var monthDays = data.Days
+                        .Where(d => d.Date >= monthStart && d.Date <= monthEnd)
+                        .ToList();
+
+                    if (monthDays.Count > 0)
+                    {
+                        var monthDto = new AbsenceCalendarDto
+                        {
+                            EmployeeId = data.EmployeeId,
+                            StartDate = monthStart,
+                            EndDate = monthEnd,
+                            Days = monthDays,
+                            Legend = data.Legend
+                        };
+
+                        _absenceCache[(currentMonth.Year, currentMonth.Month)] = monthDto;
+                    }
+
+                    currentMonth = currentMonth.AddMonths(1);
+                }
+
+                // Update cache range tracking
+                _absenceCacheStart = startDate;
+                _absenceCacheEnd = endDate;
+                _absenceCacheInitialized = true;
+
+                Log.Information("[PERF] InitializeAbsenceCacheAsync: Loaded {DayCount} days across {MonthCount} months in {ElapsedMs}ms",
+                    data.Days.Count, _absenceCache.Count, sw.ElapsedMilliseconds);
+            }
+        }
+        catch (Exception ex)
+        {
+            Log.Error(ex, "InitializeAbsenceCacheAsync: Failed to load absences");
+        }
+    }
+
+    public bool IsAbsenceMonthCached(int year, int month)
+    {
+        return _absenceCache.ContainsKey((year, month));
+    }
+
+    public (DateOnly start, DateOnly end)? GetAbsenceCacheRange()
+    {
+        if (_absenceCacheStart == null || _absenceCacheEnd == null)
+            return null;
+
+        return (_absenceCacheStart.Value, _absenceCacheEnd.Value);
+    }
+
+    public void EnsureAbsenceBuffer(int year, int month)
+    {
+        if (_client == null || !IsAuthenticated)
+            return;
+
+        if (_absenceCacheStart == null || _absenceCacheEnd == null)
+        {
+            Log.Warning("EnsureAbsenceBuffer: Cache not initialized");
+            return;
+        }
+
+        var currentMonthDate = new DateOnly(year, month, 1);
+
+        // Calculate buffer in each direction
+        var bufferBackward = MonthDifference(_absenceCacheStart.Value, currentMonthDate);
+        var bufferForward = MonthDifference(currentMonthDate, _absenceCacheEnd.Value);
+
+        Log.Debug("EnsureAbsenceBuffer: Month {Year}-{Month}, buffer backward={Back}, forward={Fwd}",
+            year, month, bufferBackward, bufferForward);
+
+        // Check backward buffer
+        if (bufferBackward < MinBufferMonths)
+        {
+            var prefetchEnd = _absenceCacheStart.Value.AddDays(-1);
+            var prefetchStart = _absenceCacheStart.Value.AddMonths(-PrefetchMonths);
+
+            Log.Information("EnsureAbsenceBuffer: Buffer backward ({BufferBack}) < {MinBuffer}, prefetching {Start} to {End}",
+                bufferBackward, MinBufferMonths, prefetchStart, prefetchEnd);
+
+            PrefetchAbsenceRangeAsync(prefetchStart, prefetchEnd, isBackward: true);
+        }
+
+        // Check forward buffer
+        if (bufferForward < MinBufferMonths)
+        {
+            var prefetchStart = _absenceCacheEnd.Value.AddDays(1);
+            var prefetchEnd = _absenceCacheEnd.Value.AddMonths(PrefetchMonths);
+
+            Log.Information("EnsureAbsenceBuffer: Buffer forward ({BufferFwd}) < {MinBuffer}, prefetching {Start} to {End}",
+                bufferForward, MinBufferMonths, prefetchStart, prefetchEnd);
+
+            PrefetchAbsenceRangeAsync(prefetchStart, prefetchEnd, isBackward: false);
+        }
+    }
+
+    private void PrefetchAbsenceRangeAsync(DateOnly startDate, DateOnly endDate, bool isBackward)
+    {
+        // Prevent multiple concurrent prefetches
+        lock (_prefetchLock)
+        {
+            // Check if we're already prefetching this range
+            if (isBackward && _absenceCacheStart != null && startDate >= _absenceCacheStart.Value)
+            {
+                Log.Debug("PrefetchAbsenceRangeAsync: Backward prefetch already in progress or not needed");
+                return;
+            }
+            if (!isBackward && _absenceCacheEnd != null && endDate <= _absenceCacheEnd.Value)
+            {
+                Log.Debug("PrefetchAbsenceRangeAsync: Forward prefetch already in progress or not needed");
+                return;
+            }
+
+            // Update range immediately to prevent duplicate prefetches
+            if (isBackward)
+                _absenceCacheStart = startDate;
+            else
+                _absenceCacheEnd = endDate;
+        }
+
+        _ = Task.Run(async () =>
+        {
+            var sw = Stopwatch.StartNew();
+            try
+            {
+                Log.Information("PrefetchAbsenceRangeAsync: Starting prefetch for {Start} to {End}", startDate, endDate);
+
+                var data = await _client!.GetAbsencesAsync(startDate, endDate);
+
+                if (data != null)
+                {
+                    // Split into monthly chunks
+                    var currentMonth = new DateOnly(startDate.Year, startDate.Month, 1);
+                    var endMonth = new DateOnly(endDate.Year, endDate.Month, 1);
+
+                    while (currentMonth <= endMonth)
+                    {
+                        var monthStart = currentMonth;
+                        var monthEnd = monthStart.AddMonths(1).AddDays(-1);
+
+                        var monthDays = data.Days
+                            .Where(d => d.Date >= monthStart && d.Date <= monthEnd)
+                            .ToList();
+
+                        if (monthDays.Count > 0 && !_absenceCache.ContainsKey((currentMonth.Year, currentMonth.Month)))
+                        {
+                            var monthDto = new AbsenceCalendarDto
+                            {
+                                EmployeeId = data.EmployeeId,
+                                StartDate = monthStart,
+                                EndDate = monthEnd,
+                                Days = monthDays,
+                                Legend = data.Legend
+                            };
+
+                            _absenceCache[(currentMonth.Year, currentMonth.Month)] = monthDto;
+                        }
+
+                        currentMonth = currentMonth.AddMonths(1);
+                    }
+
+                    Log.Information("[PERF] PrefetchAbsenceRangeAsync: Completed in {ElapsedMs}ms, cache now has {MonthCount} months",
+                        sw.ElapsedMilliseconds, _absenceCache.Count);
+                }
+            }
+            catch (Exception ex)
+            {
+                Log.Warning(ex, "PrefetchAbsenceRangeAsync: Failed to prefetch {Start} to {End}", startDate, endDate);
+
+                // Revert the range update on failure
+                lock (_prefetchLock)
+                {
+                    if (isBackward)
+                        _absenceCacheStart = _absenceCacheStart?.AddMonths(PrefetchMonths);
+                    else
+                        _absenceCacheEnd = _absenceCacheEnd?.AddMonths(-PrefetchMonths);
+                }
+            }
+        });
     }
 
     public void Dispose()

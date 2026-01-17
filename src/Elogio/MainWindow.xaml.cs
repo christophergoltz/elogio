@@ -186,6 +186,13 @@ public partial class MainWindow
 
             if (weekData != null)
             {
+                // Update employee name if now available (loaded lazily after login)
+                var employeeName = _kelioService.EmployeeName;
+                if (!string.IsNullOrEmpty(employeeName) && EmployeeNameText.Text == "Employee")
+                {
+                    EmployeeNameText.Text = employeeName;
+                }
+
                 // Find today's data
                 var todayData = weekData.Days.FirstOrDefault(d => d.Date == DateOnly.FromDateTime(today));
                 if (todayData != null)
