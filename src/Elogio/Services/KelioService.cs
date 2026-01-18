@@ -16,6 +16,10 @@ public class KelioService : IKelioService, IDisposable
     private const int InitialPastMonths = 6;    // Months to load into the past on init
     private const int InitialFutureMonths = 12; // Months to load into the future on init
 
+    // Absence date range extension to cover calendar grid overflow
+    private const int AbsenceBufferDaysBefore = 7;  // Days before month start (for leading grid days)
+    private const int AbsenceBufferDaysAfter = 13;  // Days after month end (for trailing grid days)
+
     private KelioClient? _client;
     private string? _employeeName;
 
@@ -205,9 +209,7 @@ public class KelioService : IKelioService, IDisposable
         try
         {
             // Extend date range to include visible days from adjacent months in the calendar grid
-            // Add 7 days before and after to cover leading/trailing days in the grid
-            var startDate = new DateOnly(year, month, 1).AddDays(-7);
-            var endDate = new DateOnly(year, month, 1).AddMonths(1).AddDays(13);
+            var (startDate, endDate) = GetAbsenceDateRange(year, month);
 
             Log.Information("GetMonthAbsencesAsync: Fetching absences for {StartDate} to {EndDate} (month {Year}-{Month})",
                 startDate, endDate, year, month);
@@ -247,8 +249,7 @@ public class KelioService : IKelioService, IDisposable
                 try
                 {
                     // Use same extended date range logic as GetMonthAbsencesAsync
-                    var startDate = new DateOnly(prevYear, prevMonth, 1).AddDays(-7);
-                    var endDate = new DateOnly(prevYear, prevMonth, 1).AddMonths(1).AddDays(13);
+                    var (startDate, endDate) = GetAbsenceDateRange(prevYear, prevMonth);
 
                     var data = await _client.GetAbsencesAsync(startDate, endDate);
                     if (data != null)
@@ -399,6 +400,19 @@ public class KelioService : IKelioService, IDisposable
     private static int MonthDifference(DateOnly from, DateOnly to)
     {
         return (to.Year - from.Year) * 12 + (to.Month - from.Month);
+    }
+
+    /// <summary>
+    /// Calculate the extended date range for absence queries.
+    /// Extends beyond month boundaries to cover calendar grid overflow days.
+    /// </summary>
+    private static (DateOnly Start, DateOnly End) GetAbsenceDateRange(int year, int month)
+    {
+        var firstOfMonth = new DateOnly(year, month, 1);
+        return (
+            firstOfMonth.AddDays(-AbsenceBufferDaysBefore),
+            firstOfMonth.AddMonths(1).AddDays(AbsenceBufferDaysAfter)
+        );
     }
 
     public async Task InitializeAbsenceCacheAsync()
