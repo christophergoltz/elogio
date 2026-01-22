@@ -1,6 +1,7 @@
 using System.Globalization;
 using System.Windows.Data;
 using System.Windows.Media;
+using Elogio.Resources;
 
 namespace Elogio.Converters;
 
@@ -12,9 +13,8 @@ public class BoolToBackgroundConverter : IValueConverter
 {
     public object Convert(object? value, Type targetType, object? parameter, CultureInfo culture)
     {
-        // Light gray for weekends, transparent for weekdays
         return value is true
-            ? new SolidColorBrush(Color.FromRgb(245, 245, 245))
+            ? AppColors.WeekendBackgroundBrush
             : Brushes.Transparent;
     }
 
