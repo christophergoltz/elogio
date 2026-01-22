@@ -22,6 +22,8 @@
             <converters:IsPositiveConverter x:Key="IsPositiveConverter"/>
             <converters:MissingEntryToVisibilityConverter x:Key="MissingEntryToVisibilityConverter"/>
             <converters:HexColorToBrushConverter x:Key="HexColorToBrushConverter"/>
+            <converters:BoolToMarginConverter x:Key="BoolToMarginConverter"/>
+            <converters:PageTypeToIsActiveConverter x:Key="PageTypeToIsActiveConverter"/>
         </ResourceDictionary>
     </Application.Resources>
 </Application>

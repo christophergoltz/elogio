@@ -4,19 +4,24 @@ using Serilog;
 namespace Elogio.Persistence.Api.Parsing;
 
 /// <summary>
+/// Result from employee ID extraction containing both ID and name.
+/// </summary>
+public record EmployeeIdResult(int EmployeeId, string? EmployeeName);
+
+/// <summary>
 /// Extracts employee IDs from GWT-RPC responses.
 /// This is a pure parser with no external dependencies - only string manipulation.
 /// </summary>
 public static class EmployeeIdExtractor
 {
     /// <summary>
-    /// Extract the dynamic employee ID from GlobalBWTService connect response.
+    /// Extract the dynamic employee ID and name from GlobalBWTService connect response.
     /// The employee ID appears near the END of the data tokens, before the user's name.
     /// Pattern: [..., TYPE_REF, EMPLOYEE_ID, TYPE_REF, FIRSTNAME_IDX, TYPE_REF, LASTNAME_IDX, ...]
     /// </summary>
     /// <param name="responseBody">The raw GWT-RPC response body</param>
-    /// <returns>The employee ID, or 0 if extraction failed</returns>
-    public static int ExtractFromConnectResponse(string responseBody)
+    /// <returns>The employee ID and name, or (0, null) if extraction failed</returns>
+    public static EmployeeIdResult ExtractFromConnectResponse(string responseBody)
     {
         try
         {
@@ -24,7 +29,7 @@ public static class EmployeeIdExtractor
 
             // Parse GWT-RPC: first number is string count
             if (!int.TryParse(parts[0], out var stringCount))
-                return 0;
+                return new EmployeeIdResult(0, null);
 
             // Extract strings (we need to skip past them to get to data tokens)
             var strings = new List<string>();
@@ -87,8 +92,13 @@ public static class EmployeeIdExtractor
             if (firstNameStrIdx < 0 || lastNameStrIdx < 0)
             {
                 Log.Debug("ExtractEmployeeId: Could not find name strings!");
-                return 0;
+                return new EmployeeIdResult(0, null);
             }
+
+            // Construct the full name (firstName lastName)
+            var firstName = strings[firstNameStrIdx];
+            var lastName = strings[lastNameStrIdx];
+            var fullName = $"{firstName} {lastName}";
 
             // Log last 50 data tokens for analysis
             Log.Debug("ExtractEmployeeId: Last 50 data tokens: {Tokens}", string.Join(",", dataTokens.TakeLast(50)));
@@ -109,9 +119,9 @@ public static class EmployeeIdExtractor
                         int.TryParse(dataTokens[i - 2], out var employeeId) &&
                         employeeId > 0 && employeeId <= 99999)
                     {
-                        Log.Debug("ExtractEmployeeId: Found employee ID {EmployeeId} before name pattern at pos {Position}",
-                            employeeId, i - 2);
-                        return employeeId;
+                        Log.Debug("ExtractEmployeeId: Found employee ID {EmployeeId} and name '{EmployeeName}' before name pattern at pos {Position}",
+                            employeeId, fullName, i - 2);
+                        return new EmployeeIdResult(employeeId, fullName);
                     }
                     else
                     {
@@ -123,12 +133,12 @@ public static class EmployeeIdExtractor
             }
 
             Log.Debug("ExtractEmployeeId: No valid employee ID found!");
-            return 0;
+            return new EmployeeIdResult(0, fullName);
         }
         catch (Exception ex)
         {
             Log.Debug(ex, "ExtractEmployeeIdFromConnectResponse error");
-            return 0;
+            return new EmployeeIdResult(0, null);
         }
     }
 

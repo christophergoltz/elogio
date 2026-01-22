@@ -226,7 +226,8 @@ public partial class CalendarAppInitializer
         }
 
         // Extract session context ID from calendar connect response
-        session.CalendarContextId = EmployeeIdExtractor.ExtractFromConnectResponse(response.Body);
+        var extractResult = EmployeeIdExtractor.ExtractFromConnectResponse(response.Body);
+        session.CalendarContextId = extractResult.EmployeeId;
         Log.Debug("[curl_cffi] Calendar session context ID: {ContextId}", session.CalendarContextId);
     }
 

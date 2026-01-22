@@ -1,3 +1,4 @@
+using System.Windows;
 using System.Windows.Media;
 using System.Windows.Threading;
 using CommunityToolkit.Mvvm.ComponentModel;
@@ -21,18 +22,31 @@ public enum UpdateCheckStatus
     Error
 }
 
+/// <summary>
+/// Represents a time entry pair (start - end) for display.
+/// </summary>
+public partial class TimeEntryDisplayItem : ObservableObject
+{
+    [ObservableProperty]
+    private string _displayText = string.Empty;
+}
+
 public partial class MainViewModel : ObservableObject, IDisposable
 {
     private const int UpdateCheckIntervalMinutes = 30;
 
     private readonly INavigationService _navigationService;
+    private readonly IKelioService _kelioService;
     private readonly IUpdateService _updateService;
     private readonly DispatcherTimer _updateCheckTimer;
     private bool _disposed;
 
+    #region Observable Properties
+
     [ObservableProperty]
     private string _title;
 
+    // Update status properties
     [ObservableProperty]
     private UpdateCheckStatus _updateStatus = UpdateCheckStatus.Idle;
 
@@ -48,11 +62,54 @@ public partial class MainViewModel : ObservableObject, IDisposable
     [ObservableProperty]
     private bool _isUpdateStatusVisible;
 
-    public MainViewModel(IUpdateService updateService, INavigationService navigationService)
+    // Update banner properties
+    [ObservableProperty]
+    private bool _isUpdateBannerVisible;
+
+    [ObservableProperty]
+    private string _updateBannerVersionText = string.Empty;
+
+    [ObservableProperty]
+    private string _updateBannerDetailsText = "Click 'Install Now' to update and restart";
+
+    [ObservableProperty]
+    private bool _isInstallUpdateEnabled = true;
+
+    // Employee properties
+    [ObservableProperty]
+    private string _employeeName = "Employee";
+
+    // Current page type for navigation highlighting
+    [ObservableProperty]
+    private Type? _currentPageType;
+
+    // View state properties
+    [ObservableProperty]
+    private bool _isMainLayoutVisible;
+
+    [ObservableProperty]
+    private bool _isLoginVisible = true;
+
+    [ObservableProperty]
+    private bool _isLoadingVisible;
+
+    [ObservableProperty]
+    private string _loadingStatusText = "Connecting...";
+
+    // Toast notification (for code-behind to display)
+    public event EventHandler<ToastNotificationEventArgs>? ToastRequested;
+
+    #endregion
+
+    public MainViewModel(
+        IUpdateService updateService,
+        INavigationService navigationService,
+        IKelioService kelioService)
     {
         _navigationService = navigationService;
         _updateService = updateService;
-        _title = $"Elogio v{updateService.CurrentVersion}";
+        _kelioService = kelioService;
+        _title = $"Elogio {updateService.CurrentVersion}";
 
         // Subscribe to update available event
         _updateService.UpdateAvailable += OnUpdateAvailable;
@@ -64,6 +121,8 @@ public partial class MainViewModel : ObservableObject, IDisposable
         };
         _updateCheckTimer.Tick += async (_, _) => await CheckForUpdatesAsync();
     }
+
+    #region Update Check Methods
 
     /// <summary>
     /// Start initial update check and periodic timer.
@@ -118,9 +177,13 @@ public partial class MainViewModel : ObservableObject, IDisposable
     private void OnUpdateAvailable(object? sender, UpdateInfo updateInfo)
     {
         // Ensure UI update happens on the dispatcher thread
-        System.Windows.Application.Current.Dispatcher.Invoke(() =>
+        Application.Current.Dispatcher.Invoke(() =>
         {
             SetUpdateStatus(UpdateCheckStatus.UpdateAvailable, updateInfo.Version);
+
+            // Show update banner
+            UpdateBannerVersionText = $"Version {updateInfo.Version} is available";
+            IsUpdateBannerVisible = true;
         });
     }
 
@@ -166,16 +229,127 @@ public partial class MainViewModel : ObservableObject, IDisposable
     }
 
     [RelayCommand]
-    private void NavigateToSettings()
+    private async Task InstallUpdateAsync()
     {
-        _navigationService.Navigate<SettingsPage>();
+        try
+        {
+            IsInstallUpdateEnabled = false;
+            UpdateBannerDetailsText = "Downloading update...";
+
+            await _updateService.ApplyUpdateAndRestartAsync();
+        }
+        catch (Exception ex)
+        {
+            Log.Error(ex, "Failed to install update");
+            ShowToast("Update Failed", $"Could not install update: {ex.Message}", ToastType.Error);
+            IsInstallUpdateEnabled = true;
+            UpdateBannerDetailsText = "Click 'Install Now' to try again";
+        }
+    }
+
+    [RelayCommand]
+    private void DismissUpdateBanner()
+    {
+        IsUpdateBannerVisible = false;
+    }
+
+    #endregion
+
+    #region Navigation Methods
+
+    [RelayCommand]
+    private void NavigateToDashboard()
+    {
+        _navigationService.Navigate<DashboardPage>();
+        CurrentPageType = typeof(DashboardPage);
     }
 
     [RelayCommand]
     private void NavigateToCalendar()
     {
         _navigationService.Navigate<MonthlyCalendarPage>();
+        CurrentPageType = typeof(MonthlyCalendarPage);
     }
+
+    [RelayCommand]
+    private void NavigateToYearlyCalendar()
+    {
+        _navigationService.Navigate<YearlyCalendarPage>();
+        CurrentPageType = typeof(YearlyCalendarPage);
+    }
+
+    [RelayCommand]
+    private void NavigateToSettings()
+    {
+        _navigationService.Navigate<SettingsPage>();
+        CurrentPageType = typeof(SettingsPage);
+    }
+
+    /// <summary>
+    /// Navigate to main content after successful login.
+    /// </summary>
+    public void NavigateToMain()
+    {
+        // Update employee name
+        EmployeeName = _kelioService.EmployeeName ?? "Employee";
+
+        // Switch views
+        IsLoginVisible = false;
+        IsMainLayoutVisible = true;
+
+        // Navigate to dashboard as default page
+        _navigationService.Navigate<DashboardPage>();
+        CurrentPageType = typeof(DashboardPage);
+    }
+
+    /// <summary>
+    /// Navigate to login page.
+    /// </summary>
+    public void NavigateToLogin()
+    {
+        IsMainLayoutVisible = false;
+        IsLoginVisible = true;
+    }
+
+    [RelayCommand]
+    private void Logout()
+    {
+        _kelioService.Logout();
+        NavigateToLogin();
+    }
+
+    #endregion
+
+    #region Loading Overlay Methods
+
+    public void ShowLoading(string status = "Connecting...")
+    {
+        LoadingStatusText = status;
+        IsLoadingVisible = true;
+        IsLoginVisible = false;
+        IsMainLayoutVisible = false;
+    }
+
+    public void UpdateLoadingStatus(string status)
+    {
+        LoadingStatusText = status;
+    }
+
+    public void HideLoading()
+    {
+        IsLoadingVisible = false;
+    }
+
+    #endregion
+
+    #region Toast Notification
+
+    private void ShowToast(string title, string message, ToastType type)
+    {
+        ToastRequested?.Invoke(this, new ToastNotificationEventArgs(title, message, type));
+    }
+
+    #endregion
 
     public void Dispose()
     {
@@ -185,4 +359,28 @@ public partial class MainViewModel : ObservableObject, IDisposable
         _updateCheckTimer.Stop();
         _updateService.UpdateAvailable -= OnUpdateAvailable;
     }
+}
+
+/// <summary>
+/// Event args for toast notification requests.
+/// </summary>
+public class ToastNotificationEventArgs : EventArgs
+{
+    public string Title { get; }
+    public string Message { get; }
+    public ToastType Type { get; }
+
+    public ToastNotificationEventArgs(string title, string message, ToastType type)
+    {
+        Title = title;
+        Message = message;
+        Type = type;
+    }
+}
+
+public enum ToastType
+{
+    Success,
+    Error,
+    Info
 }

@@ -36,7 +36,7 @@ public class KelioService : IKelioService, IDisposable
     private readonly object _prefetchLock = new();
 
     public bool IsAuthenticated => _client?.SessionId != null;
-    public string? EmployeeName => _employeeName;
+    public string? EmployeeName => _client?.EmployeeName ?? _employeeName;
     public int? EmployeeId => _client?.EmployeeId;
 
     /// <summary>
@@ -628,6 +628,52 @@ public class KelioService : IKelioService, IDisposable
                     else
                         _absenceCacheEnd = _absenceCacheEnd?.AddMonths(-PrefetchMonths);
                 }
+            }
+        });
+    }
+
+    /// <summary>
+    /// Start background prefetch of absence and calendar data after successful login.
+    /// This improves perceived performance when navigating to calendar views.
+    /// </summary>
+    public void StartPostLoginPrefetch()
+    {
+        if (_client == null || !IsAuthenticated)
+        {
+            Log.Warning("StartPostLoginPrefetch: Client not authenticated");
+            return;
+        }
+
+        Log.Information("[PERF] StartPostLoginPrefetch: Starting background data prefetch");
+
+        // Fire-and-forget: Initialize absence cache in background
+        _ = Task.Run(async () =>
+        {
+            try
+            {
+                var sw = Stopwatch.StartNew();
+                await InitializeAbsenceCacheAsync();
+                Log.Information("[PERF] StartPostLoginPrefetch: Absence cache initialized in {ElapsedMs}ms", sw.ElapsedMilliseconds);
+            }
+            catch (Exception ex)
+            {
+                Log.Warning(ex, "StartPostLoginPrefetch: Failed to initialize absence cache");
+            }
+        });
+
+        // Fire-and-forget: Prefetch current month calendar data
+        var today = DateOnly.FromDateTime(DateTime.Today);
+        _ = Task.Run(async () =>
+        {
+            try
+            {
+                var sw = Stopwatch.StartNew();
+                await GetMonthDataAsync(today.Year, today.Month);
+                Log.Information("[PERF] StartPostLoginPrefetch: Current month data loaded in {ElapsedMs}ms", sw.ElapsedMilliseconds);
+            }
+            catch (Exception ex)
+            {
+                Log.Warning(ex, "StartPostLoginPrefetch: Failed to prefetch current month data");
             }
         });
     }

@@ -42,6 +42,12 @@ public class SessionContext
     public int EmployeeId { get; set; }
 
     /// <summary>
+    /// Employee's full name (FirstName LastName).
+    /// Extracted during GlobalBWTService connect.
+    /// </summary>
+    public string? EmployeeName { get; set; }
+
+    /// <summary>
     /// Context ID from Calendar GlobalBWTService connect.
     /// Used for calendar-specific requests.
     /// </summary>
@@ -93,6 +99,7 @@ public class SessionContext
         BwpCsrfToken = null;
         SessionCookie = null;
         EmployeeId = 0;
+        EmployeeName = null;
         CalendarContextId = 0;
         RealEmployeeId = 0;
         IsAuthenticated = false;

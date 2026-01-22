@@ -77,6 +77,10 @@ public partial class App
                 if (success)
                 {
                     Log.Information("Auto-login successful");
+
+                    // Start background prefetch of calendar and absence data
+                    kelioService.StartPostLoginPrefetch();
+
                     mainWindow.NavigateToMain();
                 }
                 else
@@ -121,16 +125,21 @@ public partial class App
         services.AddSingleton<IKelioService, KelioService>();
         services.AddSingleton<INavigationService, NavigationService>();
         services.AddSingleton<IUpdateService, UpdateService>();
+        services.AddSingleton<IToastService, ToastService>();
 
-        // ViewModels (Singleton for shell, Transient for pages)
+        // ViewModels (Singleton for shell and dashboard, Transient for other pages)
         services.AddSingleton<MainViewModel>();
         services.AddTransient<LoginViewModel>();
+        services.AddSingleton<DashboardViewModel>(); // Singleton to preserve state across navigation
         services.AddTransient<MonthlyCalendarViewModel>();
+        services.AddTransient<YearlyCalendarViewModel>();
         services.AddTransient<SettingsViewModel>();
 
         // Pages (Transient)
         services.AddTransient<LoginPage>();
+        services.AddTransient<DashboardPage>();
         services.AddTransient<MonthlyCalendarPage>();
+        services.AddTransient<YearlyCalendarPage>();
         services.AddTransient<SettingsPage>();
 
         // Main Window (Singleton)

@@ -68,3 +68,20 @@ public class MissingEntryToVisibilityConverter : IValueConverter
         throw new NotImplementedException();
     }
 }
+
+/// <summary>
+/// Converts a boolean to a Thickness margin (true = top margin for banner, false = no margin).
+/// </summary>
+public class BoolToMarginConverter : IValueConverter
+{
+    public object Convert(object? value, Type targetType, object? parameter, CultureInfo culture)
+    {
+        // When update banner is visible, add top margin to avoid overlap
+        return value is true ? new Thickness(0, 54, 0, 0) : new Thickness(0);
+    }
+
+    public object ConvertBack(object? value, Type targetType, object? parameter, CultureInfo culture)
+    {
+        throw new NotImplementedException();
+    }
+}

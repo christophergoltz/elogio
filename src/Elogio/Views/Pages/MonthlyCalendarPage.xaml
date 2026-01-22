@@ -12,10 +12,10 @@
       Loaded="Page_Loaded" d:DataContext="{d:DesignInstance vm:MonthlyCalendarViewModel}">
 
     <Page.Resources>
-        <!-- Day cell state to background color -->
-        <Style TargetType="Border">
-            <Setter Property="BorderBrush" Value="{ui:ThemeResource ControlStrokeColorDefaultBrush}" />
-            <Setter Property="BorderThickness" Value="1" />
+        <!-- Day cell style - only apply to day cells, not all borders -->
+        <Style x:Key="DayCellStyle" TargetType="Border">
+            <Setter Property="BorderBrush" Value="Transparent" />
+            <Setter Property="BorderThickness" Value="0" />
             <Setter Property="CornerRadius" Value="4" />
             <Setter Property="Margin" Value="2" />
             <Setter Property="Padding" Value="4" />
@@ -128,12 +128,12 @@
                     <DataTemplate DataType="{x:Type vm:DayCellViewModel}">
                         <Border Margin="2"
                                 CornerRadius="4"
-                                BorderThickness="1"
                                 Padding="5">
                             <Border.Style>
                                 <Style TargetType="Border">
                                     <Setter Property="Background" Value="Transparent" />
-                                    <Setter Property="BorderBrush" Value="{ui:ThemeResource ControlStrokeColorDefaultBrush}" />
+                                    <Setter Property="BorderBrush" Value="Transparent" />
+                                    <Setter Property="BorderThickness" Value="0" />
                                     <Style.Triggers>
                                         <DataTrigger Binding="{Binding IsCurrentMonth}" Value="False">
                                             <Setter Property="Opacity" Value="0.3" />

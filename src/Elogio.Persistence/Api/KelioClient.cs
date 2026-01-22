@@ -50,6 +50,7 @@ public class KelioClient : IDisposable
     public bool IsAuthenticated => _session.IsAuthenticated;
     public string? SessionId => _session.SessionId;
     public int EmployeeId => _session.EmployeeId;
+    public string? EmployeeName => _session.EmployeeName;
 
     /// <summary>
     /// Returns true if using standalone curl_proxy.exe (no Python required).

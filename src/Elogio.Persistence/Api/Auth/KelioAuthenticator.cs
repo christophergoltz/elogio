@@ -384,8 +384,10 @@ public partial class KelioAuthenticator
             throw new HttpRequestException($"GlobalBWTService connect failed with status {response.StatusCode}");
         }
 
-        // Extract employee ID from response
-        session.EmployeeId = EmployeeIdExtractor.ExtractFromConnectResponse(response.Body);
+        // Extract employee ID and name from response
+        var extractResult = EmployeeIdExtractor.ExtractFromConnectResponse(response.Body);
+        session.EmployeeId = extractResult.EmployeeId;
+        session.EmployeeName = extractResult.EmployeeName;
     }
 
     #region Helper Methods

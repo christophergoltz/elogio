@@ -99,6 +99,12 @@ public interface IKelioService
     /// in both directions from the specified month. Triggers background prefetch if needed.
     /// </summary>
     void EnsureAbsenceBuffer(int year, int month);
+
+    /// <summary>
+    /// Start background prefetch of absence and calendar data after successful login.
+    /// This is a fire-and-forget operation to improve perceived performance.
+    /// </summary>
+    void StartPostLoginPrefetch();
 }
 
 /// <summary>
