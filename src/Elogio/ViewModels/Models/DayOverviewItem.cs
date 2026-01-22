@@ -4,7 +4,7 @@ using Elogio.Persistence.Dto;
 using Elogio.Resources;
 using Elogio.Utilities;
 
-namespace Elogio.ViewModels;
+namespace Elogio.ViewModels.Models;
 
 /// <summary>
 /// Represents a day in the week overview on the dashboard.

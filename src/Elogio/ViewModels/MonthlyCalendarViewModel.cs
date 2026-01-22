@@ -62,7 +62,7 @@ public partial class MonthlyCalendarViewModel : ObservableObject
     /// </summary>
     public bool CanNavigateNext => true;
 
-    public ObservableCollection<DayCellViewModel> DayCells { get; } = [];
+    public ObservableCollection<Models.DayCellViewModel> DayCells { get; } = [];
     public ObservableCollection<string> DayHeaders { get; } = ["Mo", "Tu", "We", "Th", "Fr", "Sa", "Su"];
 
     public MonthlyCalendarViewModel(IKelioService kelioService)
@@ -331,7 +331,7 @@ public partial class MonthlyCalendarViewModel : ObservableObject
         // Add empty cells for days before the first of the month
         for (var i = 0; i < firstDayOffset; i++)
         {
-            DayCells.Add(new DayCellViewModel { IsCurrentMonth = false });
+            DayCells.Add(new Models.DayCellViewModel { IsCurrentMonth = false });
         }
 
         // Add cells for each day of the month
@@ -342,7 +342,7 @@ public partial class MonthlyCalendarViewModel : ObservableObject
             var isToday = date == today;
             var isFuture = date > today;
 
-            var cell = new DayCellViewModel
+            var cell = new Models.DayCellViewModel
             {
                 DayNumber = day,
                 Date = date,
@@ -400,7 +400,7 @@ public partial class MonthlyCalendarViewModel : ObservableObject
         // Add trailing empty cells to complete the grid (6 rows x 7 columns = 42)
         while (DayCells.Count < 42)
         {
-            DayCells.Add(new DayCellViewModel { IsCurrentMonth = false });
+            DayCells.Add(new Models.DayCellViewModel { IsCurrentMonth = false });
         }
     }
 }

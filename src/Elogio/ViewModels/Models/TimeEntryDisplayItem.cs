@@ -1,6 +1,6 @@
 using CommunityToolkit.Mvvm.ComponentModel;
 
-namespace Elogio.ViewModels;
+namespace Elogio.ViewModels.Models;
 
 /// <summary>
 /// Represents a time entry pair (start - end) for display.

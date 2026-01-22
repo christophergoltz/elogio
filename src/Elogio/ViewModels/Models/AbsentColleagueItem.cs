@@ -1,4 +1,4 @@
-namespace Elogio.ViewModels;
+namespace Elogio.ViewModels.Models;
 
 /// <summary>
 /// Represents an absent colleague (placeholder for future implementation).

@@ -1,7 +1,7 @@
 using CommunityToolkit.Mvvm.ComponentModel;
 using Elogio.Persistence.Dto;
 
-namespace Elogio.ViewModels;
+namespace Elogio.ViewModels.Models;
 
 /// <summary>
 /// Represents a single day in the yearly calendar mini-month view.

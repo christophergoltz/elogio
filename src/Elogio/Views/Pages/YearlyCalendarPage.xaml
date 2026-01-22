@@ -6,6 +6,7 @@
       xmlns:ui="http://schemas.lepo.co/wpfui/2022/xaml"
       xmlns:vm="clr-namespace:Elogio.ViewModels"
       xmlns:dto="clr-namespace:Elogio.Persistence.Dto;assembly=Elogio.Persistence"
+      xmlns:models="clr-namespace:Elogio.ViewModels.Models"
       mc:Ignorable="d"
       d:DesignHeight="800" d:DesignWidth="1000"
       Title="Yearly Calendar"
@@ -101,7 +102,7 @@
                     </ItemsPanelTemplate>
                 </ItemsControl.ItemsPanel>
                 <ItemsControl.ItemTemplate>
-                    <DataTemplate DataType="{x:Type vm:MonthAbsenceCard}">
+                    <DataTemplate DataType="{x:Type models:MonthAbsenceCard}">
                         <ui:Card Margin="6" Padding="8">
                             <Grid>
                                 <Grid.RowDefinitions>
@@ -155,7 +156,7 @@
                                         </ItemsPanelTemplate>
                                     </ItemsControl.ItemsPanel>
                                     <ItemsControl.ItemTemplate>
-                                        <DataTemplate DataType="{x:Type vm:YearlyDayItem}">
+                                        <DataTemplate DataType="{x:Type models:YearlyDayItem}">
                                             <Border Margin="1" CornerRadius="2" MinHeight="14" MinWidth="14">
                                                 <Border.Style>
                                                     <Style TargetType="Border">

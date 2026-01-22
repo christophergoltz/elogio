@@ -1,4 +1,4 @@
-namespace Elogio.ViewModels;
+namespace Elogio.ViewModels.Models;
 
 public enum DayCellState
 {

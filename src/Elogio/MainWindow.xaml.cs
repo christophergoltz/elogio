@@ -1,6 +1,7 @@
 using System.Windows;
 using Elogio.Services;
 using Elogio.ViewModels;
+using Elogio.ViewModels.Models;
 using Elogio.Views.Pages;
 using Microsoft.Extensions.DependencyInjection;
 using Wpf.Ui.Controls;

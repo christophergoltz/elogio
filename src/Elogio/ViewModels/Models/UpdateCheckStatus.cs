@@ -1,4 +1,4 @@
-namespace Elogio.ViewModels;
+namespace Elogio.ViewModels.Models;
 
 /// <summary>
 /// Status of the update check operation.

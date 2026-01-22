@@ -6,6 +6,7 @@
       xmlns:ui="http://schemas.lepo.co/wpfui/2022/xaml"
       xmlns:vm="clr-namespace:Elogio.ViewModels"
       xmlns:dto="clr-namespace:Elogio.Persistence.Dto;assembly=Elogio.Persistence"
+      xmlns:models="clr-namespace:Elogio.ViewModels.Models"
       mc:Ignorable="d"
       d:DesignHeight="700" d:DesignWidth="900"
       Title="Monthly Calendar"
@@ -125,7 +126,7 @@
                     </ItemsPanelTemplate>
                 </ItemsControl.ItemsPanel>
                 <ItemsControl.ItemTemplate>
-                    <DataTemplate DataType="{x:Type vm:DayCellViewModel}">
+                    <DataTemplate DataType="{x:Type models:DayCellViewModel}">
                         <Border Margin="2"
                                 CornerRadius="4"
                                 Padding="5">
@@ -161,7 +162,7 @@
                                         <DataTrigger Binding="{Binding AbsenceType}" Value="{x:Static dto:AbsenceType.HalfHoliday}">
                                             <Setter Property="Background" Value="{StaticResource HalfHolidayStripeBrush}" />
                                         </DataTrigger>
-                                        <DataTrigger Binding="{Binding State}" Value="{x:Static vm:DayCellState.MissingEntry}">
+                                        <DataTrigger Binding="{Binding State}" Value="{x:Static models:DayCellState.MissingEntry}">
                                             <Setter Property="Background" Value="#33F44336" />
                                         </DataTrigger>
                                     </Style.Triggers>
@@ -250,10 +251,10 @@
                                                         <DataTrigger Binding="{Binding IsCurrentMonth}" Value="False">
                                                             <Setter Property="Visibility" Value="Collapsed" />
                                                         </DataTrigger>
-                                                        <DataTrigger Binding="{Binding State}" Value="{x:Static vm:DayCellState.OverHours}">
+                                                        <DataTrigger Binding="{Binding State}" Value="{x:Static models:DayCellState.OverHours}">
                                                             <Setter Property="Foreground" Value="#4CAF50" />
                                                         </DataTrigger>
-                                                        <DataTrigger Binding="{Binding State}" Value="{x:Static vm:DayCellState.UnderHours}">
+                                                        <DataTrigger Binding="{Binding State}" Value="{x:Static models:DayCellState.UnderHours}">
                                                             <Setter Property="Foreground" Value="#F44336" />
                                                         </DataTrigger>
                                                     </Style.Triggers>

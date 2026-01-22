@@ -5,6 +5,7 @@ using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
 using Elogio.Resources;
 using Elogio.Services;
+using Elogio.ViewModels.Models;
 using Elogio.Views.Pages;
 using Serilog;
 using Wpf.Ui.Controls;

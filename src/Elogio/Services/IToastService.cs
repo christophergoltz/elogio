@@ -1,4 +1,5 @@
 using Elogio.ViewModels;
+using Elogio.ViewModels.Models;
 
 namespace Elogio.Services;
 

@@ -5,6 +5,7 @@
       xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
       xmlns:ui="http://schemas.lepo.co/wpfui/2022/xaml"
       xmlns:vm="clr-namespace:Elogio.ViewModels"
+      xmlns:models="clr-namespace:Elogio.ViewModels.Models"
       mc:Ignorable="d"
       d:DesignHeight="700" d:DesignWidth="1000"
       Title="Dashboard"
@@ -97,7 +98,7 @@
                                        Margin="0,0,0,8" />
                             <ItemsControl ItemsSource="{Binding TimeEntries}">
                                 <ItemsControl.ItemTemplate>
-                                    <DataTemplate DataType="{x:Type vm:TimeEntryDisplayItem}">
+                                    <DataTemplate DataType="{x:Type models:TimeEntryDisplayItem}">
                                         <Border Background="{ui:ThemeResource ControlFillColorDefaultBrush}"
                                                 CornerRadius="4"
                                                 Padding="12,8"
@@ -189,7 +190,7 @@
                                 <ItemsControl ItemsSource="{Binding AbsentColleagues}"
                                               Visibility="{Binding HasAbsentColleagues, Converter={StaticResource BoolToVisibilityConverter}}">
                                     <ItemsControl.ItemTemplate>
-                                        <DataTemplate DataType="{x:Type vm:AbsentColleagueItem}">
+                                        <DataTemplate DataType="{x:Type models:AbsentColleagueItem}">
                                             <Border Background="{ui:ThemeResource ControlFillColorDefaultBrush}"
                                                     CornerRadius="6"
                                                     Padding="12"
@@ -281,7 +282,7 @@
                             </ItemsPanelTemplate>
                         </ItemsControl.ItemsPanel>
                         <ItemsControl.ItemTemplate>
-                            <DataTemplate DataType="{x:Type vm:DayOverviewItem}">
+                            <DataTemplate DataType="{x:Type models:DayOverviewItem}">
                                 <Border Margin="4" Padding="12" CornerRadius="8">
                                     <Border.Style>
                                         <Style TargetType="Border">
@@ -296,7 +297,7 @@
                                                     <Setter Property="BorderThickness" Value="2" />
                                                 </DataTrigger>
                                                 <DataTrigger Binding="{Binding State}"
-                                                             Value="{x:Static vm:DayOverviewState.MissingEntry}">
+                                                             Value="{x:Static models:DayOverviewState.MissingEntry}">
                                                     <Setter Property="Background" Value="#20F44336" />
                                                 </DataTrigger>
                                             </Style.Triggers>
@@ -352,7 +353,7 @@
                                                 <Style TargetType="TextBlock">
                                                     <Style.Triggers>
                                                         <DataTrigger Binding="{Binding State}"
-                                                                     Value="{x:Static vm:DayOverviewState.Future}">
+                                                                     Value="{x:Static models:DayOverviewState.Future}">
                                                             <Setter Property="Visibility" Value="Collapsed" />
                                                         </DataTrigger>
                                                     </Style.Triggers>

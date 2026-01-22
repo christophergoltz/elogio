@@ -7,6 +7,7 @@ using Elogio.Persistence.Dto;
 using Elogio.Resources;
 using Elogio.Services;
 using Elogio.Utilities;
+using Elogio.ViewModels.Models;
 using Serilog;
 
 namespace Elogio.ViewModels;
@@ -22,7 +23,7 @@ public partial class DashboardViewModel : ObservableObject
     #region Week Overview Properties
 
     [ObservableProperty]
-    private ObservableCollection<DayOverviewItem> _weekDays = [];
+    private ObservableCollection<Models.DayOverviewItem> _weekDays = [];
 
     [ObservableProperty]
     private string _weekRangeDisplay = string.Empty;
@@ -83,7 +84,7 @@ public partial class DashboardViewModel : ObservableObject
     private bool _hasTimeEntries;
 
     [ObservableProperty]
-    private ObservableCollection<TimeEntryDisplayItem> _timeEntries = [];
+    private ObservableCollection<Models.TimeEntryDisplayItem> _timeEntries = [];
 
     #endregion
 
@@ -252,7 +253,7 @@ public partial class DashboardViewModel : ObservableObject
             var dayIndex = ((int)dayData.Date.DayOfWeek + 6) % 7; // Monday = 0
             if (dayIndex >= 5) continue; // Safety check
 
-            var item = new DayOverviewItem
+            var item = new Models.DayOverviewItem
             {
                 Date = dayData.Date,
                 DayName = dayNames[dayIndex],
@@ -392,7 +393,7 @@ public partial class DashboardViewModel : ObservableObject
                 ? $"{startTime} - {endEntry.Time:HH:mm}"
                 : startTime;
 
-            TimeEntries.Add(new TimeEntryDisplayItem { DisplayText = displayText });
+            TimeEntries.Add(new Models.TimeEntryDisplayItem { DisplayText = displayText });
         }
     }
 

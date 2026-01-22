@@ -1,4 +1,4 @@
-namespace Elogio.ViewModels;
+namespace Elogio.ViewModels.Models;
 
 /// <summary>
 /// Event args for toast notification requests.

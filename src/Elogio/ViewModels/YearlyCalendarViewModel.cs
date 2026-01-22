@@ -19,7 +19,7 @@ public partial class YearlyCalendarViewModel : ObservableObject
     private string _yearDisplay = string.Empty;
 
     [ObservableProperty]
-    private ObservableCollection<MonthAbsenceCard> _months = [];
+    private ObservableCollection<Models.MonthAbsenceCard> _months = [];
 
     [ObservableProperty]
     private bool _isLoading;
@@ -69,7 +69,7 @@ public partial class YearlyCalendarViewModel : ObservableObject
             // Load all 12 months
             for (int month = 1; month <= 12; month++)
             {
-                var monthCard = new MonthAbsenceCard
+                var monthCard = new Models.MonthAbsenceCard
                 {
                     Month = month,
                     Year = SelectedYear,
@@ -109,7 +109,7 @@ public partial class YearlyCalendarViewModel : ObservableObject
         }
     }
 
-    private void BuildMonthGrid(MonthAbsenceCard monthCard, AbsenceCalendarDto? absences, DateOnly today)
+    private void BuildMonthGrid(Models.MonthAbsenceCard monthCard, AbsenceCalendarDto? absences, DateOnly today)
     {
         var firstDay = new DateOnly(monthCard.Year, monthCard.Month, 1);
         var daysInMonth = DateTime.DaysInMonth(monthCard.Year, monthCard.Month);
@@ -128,7 +128,7 @@ public partial class YearlyCalendarViewModel : ObservableObject
         // Add empty cells for days before first of month
         for (int i = 0; i < firstDayOffset; i++)
         {
-            monthCard.Days.Add(new YearlyDayItem { IsCurrentMonth = false });
+            monthCard.Days.Add(new Models.YearlyDayItem { IsCurrentMonth = false });
         }
 
         // Add days of the month
@@ -137,7 +137,7 @@ public partial class YearlyCalendarViewModel : ObservableObject
             var date = new DateOnly(monthCard.Year, monthCard.Month, day);
             var isWeekend = date.DayOfWeek is DayOfWeek.Saturday or DayOfWeek.Sunday;
 
-            var dayItem = new YearlyDayItem
+            var dayItem = new Models.YearlyDayItem
             {
                 Date = date,
                 DayNumber = day,
@@ -173,7 +173,7 @@ public partial class YearlyCalendarViewModel : ObservableObject
         // Fill remaining cells to complete the grid (6 rows x 7 = 42)
         while (monthCard.Days.Count < 42)
         {
-            monthCard.Days.Add(new YearlyDayItem { IsCurrentMonth = false });
+            monthCard.Days.Add(new Models.YearlyDayItem { IsCurrentMonth = false });
         }
 
         monthCard.VacationDayCount = vacationCount;
