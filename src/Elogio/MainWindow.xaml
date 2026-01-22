@@ -16,6 +16,7 @@
 
     <ui:FluentWindow.Resources>
         <!-- Navigation button style with icon and text -->
+        <!-- ReSharper disable once Xaml.StaticResourceNotResolved // Justification: Resource can only be resolved during runtime -->
         <Style x:Key="NavButtonStyle" TargetType="ui:Button" BasedOn="{StaticResource {x:Type ui:Button}}">
             <Setter Property="Height" Value="40" />
             <Setter Property="Margin" Value="8,2" />
