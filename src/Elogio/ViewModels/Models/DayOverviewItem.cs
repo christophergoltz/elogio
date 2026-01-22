@@ -1,6 +1,7 @@
 using System.Windows.Media;
 using CommunityToolkit.Mvvm.ComponentModel;
 using Elogio.Persistence.Dto;
+using Elogio.Utilities;
 
 namespace Elogio.ViewModels;
 
@@ -51,12 +52,12 @@ public partial class DayOverviewItem : ObservableObject
     /// <summary>
     /// Formatted worked time (e.g., "7:30").
     /// </summary>
-    public string WorkedDisplay => WorkedTime == TimeSpan.Zero ? "--" : FormatTime(WorkedTime);
+    public string WorkedDisplay => WorkedTime == TimeSpan.Zero ? "--" : TimeSpanFormatter.Format(WorkedTime);
 
     /// <summary>
     /// Formatted expected time (e.g., "/ 7:00").
     /// </summary>
-    public string ExpectedDisplay => ExpectedTime == TimeSpan.Zero ? "" : $"/ {FormatTime(ExpectedTime)}";
+    public string ExpectedDisplay => ExpectedTime == TimeSpan.Zero ? "" : $"/ {TimeSpanFormatter.Format(ExpectedTime)}";
 
     /// <summary>
     /// Formatted difference with sign (e.g., "+0:30" or "-1:00").
@@ -67,11 +68,7 @@ public partial class DayOverviewItem : ObservableObject
         {
             if (ExpectedTime == TimeSpan.Zero) return "";
             var diff = WorkedTime - ExpectedTime;
-            if (diff == TimeSpan.Zero) return "";
-            var sign = diff >= TimeSpan.Zero ? "+" : "-";
-            var absHours = (int)Math.Abs(diff.TotalHours);
-            var absMinutes = Math.Abs(diff.Minutes);
-            return $"{sign}{absHours}:{absMinutes:D2}";
+            return TimeSpanFormatter.FormatWithSign(diff);
         }
     }
 
@@ -100,6 +97,4 @@ public partial class DayOverviewItem : ObservableObject
     /// Whether this is today.
     /// </summary>
     public bool IsToday => Date == DateOnly.FromDateTime(DateTime.Today);
-
-    private static string FormatTime(TimeSpan t) => $"{(int)t.TotalHours}:{Math.Abs(t.Minutes):D2}";
 }

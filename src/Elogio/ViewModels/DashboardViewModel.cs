@@ -5,6 +5,7 @@ using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
 using Elogio.Persistence.Dto;
 using Elogio.Services;
+using Elogio.Utilities;
 using Serilog;
 
 namespace Elogio.ViewModels;
@@ -40,17 +41,17 @@ public partial class DashboardViewModel : ObservableObject
     /// <summary>
     /// Formatted weekly worked time.
     /// </summary>
-    public string WeeklyWorkedDisplay => FormatTimeSpan(WeeklyWorked);
+    public string WeeklyWorkedDisplay => TimeSpanFormatter.Format(WeeklyWorked);
 
     /// <summary>
     /// Formatted weekly expected time.
     /// </summary>
-    public string WeeklyExpectedDisplay => FormatTimeSpan(WeeklyExpected);
+    public string WeeklyExpectedDisplay => TimeSpanFormatter.Format(WeeklyExpected);
 
     /// <summary>
     /// Formatted weekly balance with sign.
     /// </summary>
-    public string WeeklyBalanceDisplay => FormatTimeSpanWithSign(WeeklyBalance);
+    public string WeeklyBalanceDisplay => TimeSpanFormatter.FormatWithSign(WeeklyBalance);
 
     /// <summary>
     /// Color for the weekly balance.
@@ -519,22 +520,6 @@ public partial class DashboardViewModel : ObservableObject
     private void ShowToast(string title, string message, ToastType type)
     {
         _toastService.ShowToast(title, message, type);
-    }
-
-    private static string FormatTimeSpan(TimeSpan time)
-    {
-        var totalHours = (int)Math.Abs(time.TotalHours);
-        var minutes = Math.Abs(time.Minutes);
-        return $"{totalHours}:{minutes:D2}";
-    }
-
-    private static string FormatTimeSpanWithSign(TimeSpan time)
-    {
-        var totalHours = (int)Math.Abs(time.TotalHours);
-        var minutes = Math.Abs(time.Minutes);
-        var sign = time < TimeSpan.Zero ? "-" : "+";
-        if (time == TimeSpan.Zero) sign = "";
-        return $"{sign}{totalHours}:{minutes:D2}";
     }
 
     #endregion
