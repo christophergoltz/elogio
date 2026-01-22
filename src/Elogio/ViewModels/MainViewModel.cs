@@ -10,27 +10,6 @@ using Wpf.Ui.Controls;
 
 namespace Elogio.ViewModels;
 
-/// <summary>
-/// Status of the update check operation.
-/// </summary>
-public enum UpdateCheckStatus
-{
-    Idle,
-    Checking,
-    NoUpdates,
-    UpdateAvailable,
-    Error
-}
-
-/// <summary>
-/// Represents a time entry pair (start - end) for display.
-/// </summary>
-public partial class TimeEntryDisplayItem : ObservableObject
-{
-    [ObservableProperty]
-    private string _displayText = string.Empty;
-}
-
 public partial class MainViewModel : ObservableObject, IDisposable
 {
     private const int UpdateCheckIntervalMinutes = 30;
@@ -359,28 +338,4 @@ public partial class MainViewModel : ObservableObject, IDisposable
         _updateCheckTimer.Stop();
         _updateService.UpdateAvailable -= OnUpdateAvailable;
     }
-}
-
-/// <summary>
-/// Event args for toast notification requests.
-/// </summary>
-public class ToastNotificationEventArgs : EventArgs
-{
-    public string Title { get; }
-    public string Message { get; }
-    public ToastType Type { get; }
-
-    public ToastNotificationEventArgs(string title, string message, ToastType type)
-    {
-        Title = title;
-        Message = message;
-        Type = type;
-    }
-}
-
-public enum ToastType
-{
-    Success,
-    Error,
-    Info
 }
