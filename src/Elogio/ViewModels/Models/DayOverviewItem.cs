@@ -1,6 +1,7 @@
 using System.Windows.Media;
 using CommunityToolkit.Mvvm.ComponentModel;
 using Elogio.Persistence.Dto;
+using Elogio.Resources;
 using Elogio.Utilities;
 
 namespace Elogio.ViewModels;
@@ -81,10 +82,10 @@ public partial class DayOverviewItem : ObservableObject
         {
             var diff = WorkedTime - ExpectedTime;
             return diff < TimeSpan.Zero
-                ? new SolidColorBrush(Color.FromRgb(0xF4, 0x43, 0x36)) // Red
+                ? AppColors.ErrorBrush
                 : diff > TimeSpan.Zero
-                    ? new SolidColorBrush(Color.FromRgb(0x4C, 0xAF, 0x50)) // Green
-                    : new SolidColorBrush(Colors.Gray);
+                    ? AppColors.SuccessBrush
+                    : AppColors.NeutralBrush;
         }
     }
 

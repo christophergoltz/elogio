@@ -3,6 +3,7 @@ using System.Windows.Media;
 using System.Windows.Threading;
 using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
+using Elogio.Resources;
 using Elogio.Services;
 using Elogio.Views.Pages;
 using Serilog;
@@ -33,7 +34,7 @@ public partial class MainViewModel : ObservableObject, IDisposable
     private string _updateStatusText = string.Empty;
 
     [ObservableProperty]
-    private SolidColorBrush _updateStatusBrush = new(Colors.Gray);
+    private SolidColorBrush _updateStatusBrush = AppColors.NeutralBrush;
 
     [ObservableProperty]
     private SymbolRegular _updateStatusIcon = SymbolRegular.Info24;
@@ -175,19 +176,19 @@ public partial class MainViewModel : ObservableObject, IDisposable
         {
             case UpdateCheckStatus.Checking:
                 UpdateStatusText = "Checking for updates...";
-                UpdateStatusBrush = new SolidColorBrush(Color.FromRgb(0xFF, 0xA5, 0x00)); // Orange
+                UpdateStatusBrush = AppColors.WarningBrush;
                 UpdateStatusIcon = SymbolRegular.ArrowSync24;
                 break;
 
             case UpdateCheckStatus.NoUpdates:
                 UpdateStatusText = "Up to date";
-                UpdateStatusBrush = new SolidColorBrush(Color.FromRgb(0x4C, 0xAF, 0x50)); // Green
+                UpdateStatusBrush = AppColors.SuccessBrush;
                 UpdateStatusIcon = SymbolRegular.CheckmarkCircle24;
                 break;
 
             case UpdateCheckStatus.UpdateAvailable:
                 UpdateStatusText = $"Update {version} available";
-                UpdateStatusBrush = new SolidColorBrush(Color.FromRgb(0x21, 0x96, 0xF3)); // Blue
+                UpdateStatusBrush = AppColors.InfoBrush;
                 UpdateStatusIcon = SymbolRegular.ArrowDownload24;
                 // Stop periodic checks once update is found
                 _updateCheckTimer.Stop();
@@ -195,13 +196,13 @@ public partial class MainViewModel : ObservableObject, IDisposable
 
             case UpdateCheckStatus.Error:
                 UpdateStatusText = "Update check failed";
-                UpdateStatusBrush = new SolidColorBrush(Color.FromRgb(0xF4, 0x43, 0x36)); // Red
+                UpdateStatusBrush = AppColors.ErrorBrush;
                 UpdateStatusIcon = SymbolRegular.ErrorCircle24;
                 break;
 
             default:
                 UpdateStatusText = string.Empty;
-                UpdateStatusBrush = new SolidColorBrush(Colors.Gray);
+                UpdateStatusBrush = AppColors.NeutralBrush;
                 UpdateStatusIcon = SymbolRegular.Info24;
                 break;
         }

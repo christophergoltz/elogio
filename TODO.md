@@ -44,19 +44,19 @@
 
 ### P1 - Hohe Priorität (vor Production Release)
 
-- [ ] **Mehrere Klassen pro Datei auftrennen**
+- [x] **Mehrere Klassen pro Datei auftrennen**
   - `MainViewModel.cs`: `UpdateCheckStatus`, `TimeEntryDisplayItem`, `ToastNotificationEventArgs`, `ToastType` → eigene Dateien in `ViewModels/Models/`
   - `DashboardViewModel.cs`: `DayOverviewItem`, `DayOverviewState`, `AbsentColleagueItem` → eigene Dateien
   - Konvention: 1 Klasse = 1 Datei (Ausnahme: eng zusammengehörige Helper-Records)
 
 ### P2 - Mittlere Priorität (Code Quality)
 
-- [ ] **TimeSpanFormatter Utility-Klasse erstellen**
+- [x] **TimeSpanFormatter Utility-Klasse erstellen**
   - Duplicate Code in `DayOverviewItem.FormatTime()` und `DashboardViewModel.FormatTimeSpan()`
   - Zentrale `TimeSpanFormatter` Klasse mit Methoden: `Format()`, `FormatWithSign()`
   - Ort: `Elogio/Utilities/TimeSpanFormatter.cs`
 
-- [ ] **Magic Colors als Konstanten definieren**
+- [x] **Magic Colors als Konstanten definieren**
   - Betroffene Dateien: `MainViewModel.cs`, `DashboardViewModel.cs`, `DayOverviewItem.cs`
   - Konstanten-Klasse: `Elogio/Resources/AppColors.cs`
   - Farben: SuccessGreen, ErrorRed, WarningOrange, InfoBlue, NeutralGray

@@ -4,6 +4,7 @@ using System.Windows.Media;
 using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
 using Elogio.Persistence.Dto;
+using Elogio.Resources;
 using Elogio.Services;
 using Elogio.Utilities;
 using Serilog;
@@ -57,10 +58,10 @@ public partial class DashboardViewModel : ObservableObject
     /// Color for the weekly balance.
     /// </summary>
     public SolidColorBrush WeeklyBalanceBrush => WeeklyBalance < TimeSpan.Zero
-        ? new SolidColorBrush(Color.FromRgb(0xF4, 0x43, 0x36)) // Red
+        ? AppColors.ErrorBrush
         : WeeklyBalance > TimeSpan.Zero
-            ? new SolidColorBrush(Color.FromRgb(0x4C, 0xAF, 0x50)) // Green
-            : new SolidColorBrush(Colors.Gray);
+            ? AppColors.SuccessBrush
+            : AppColors.NeutralBrush;
 
     #endregion
 
@@ -76,7 +77,7 @@ public partial class DashboardViewModel : ObservableObject
     private string _todayDifferenceText = "";
 
     [ObservableProperty]
-    private SolidColorBrush _todayDifferenceBrush = new(Colors.Gray);
+    private SolidColorBrush _todayDifferenceBrush = AppColors.NeutralBrush;
 
     [ObservableProperty]
     private bool _hasTimeEntries;
@@ -349,10 +350,10 @@ public partial class DashboardViewModel : ObservableObject
 
         // Color for difference
         TodayDifferenceBrush = balance < TimeSpan.Zero
-            ? new SolidColorBrush(Color.FromRgb(0xF4, 0x43, 0x36)) // Red
+            ? AppColors.ErrorBrush
             : balance > TimeSpan.Zero
-                ? new SolidColorBrush(Color.FromRgb(0x4C, 0xAF, 0x50)) // Green
-                : new SolidColorBrush(Colors.Gray);
+                ? AppColors.SuccessBrush
+                : AppColors.NeutralBrush;
         
         // Update time entries display
         UpdateTimeEntriesDisplay(todayData.Entries);
