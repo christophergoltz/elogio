@@ -4,6 +4,7 @@ using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
 using Elogio.Persistence.Dto;
 using Elogio.Services;
+using Elogio.Utilities;
 using Serilog;
 
 namespace Elogio.ViewModels;
@@ -44,17 +45,17 @@ public partial class MonthlyCalendarViewModel : ObservableObject
     /// <summary>
     /// Formatted total worked time (HH:MM).
     /// </summary>
-    public string TotalWorkedDisplay => FormatTimeSpan(TotalWorked);
+    public string TotalWorkedDisplay => TimeSpanFormatter.Format(TotalWorked);
 
     /// <summary>
     /// Formatted total expected time (HH:MM).
     /// </summary>
-    public string TotalExpectedDisplay => FormatTimeSpan(TotalExpected);
+    public string TotalExpectedDisplay => TimeSpanFormatter.Format(TotalExpected);
 
     /// <summary>
     /// Formatted balance with sign (e.g., "-5:30" or "+2:15").
     /// </summary>
-    public string BalanceDisplay => FormatTimeSpanWithSign(Balance);
+    public string BalanceDisplay => TimeSpanFormatter.FormatWithSign(Balance);
 
     /// <summary>
     /// Whether the user can navigate to the next month (always enabled).
@@ -401,28 +402,5 @@ public partial class MonthlyCalendarViewModel : ObservableObject
         {
             DayCells.Add(new DayCellViewModel { IsCurrentMonth = false });
         }
-    }
-
-    /// <summary>
-    /// Format a TimeSpan as total hours:minutes (e.g., "50:30" for 50h 30m).
-    /// </summary>
-    private static string FormatTimeSpan(TimeSpan time)
-    {
-        var totalHours = (int)Math.Abs(time.TotalHours);
-        var minutes = Math.Abs(time.Minutes);
-        return $"{totalHours}:{minutes:D2}";
-    }
-
-    /// <summary>
-    /// Format a TimeSpan with sign (e.g., "-5:30" or "+2:15").
-    /// </summary>
-    private static string FormatTimeSpanWithSign(TimeSpan time)
-    {
-        var totalHours = (int)Math.Abs(time.TotalHours);
-        var minutes = Math.Abs(time.Minutes);
-        var sign = time < TimeSpan.Zero ? "-" : "+";
-        // Don't show + for zero
-        if (time == TimeSpan.Zero) sign = "";
-        return $"{sign}{totalHours}:{minutes:D2}";
     }
 }

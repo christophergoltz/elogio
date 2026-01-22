@@ -45,9 +45,11 @@
 ### P1 - Hohe Priorität (vor Production Release)
 
 - [x] **Mehrere Klassen pro Datei auftrennen**
-  - `MainViewModel.cs`: `UpdateCheckStatus`, `TimeEntryDisplayItem`, `ToastNotificationEventArgs`, `ToastType` → eigene Dateien in `ViewModels/Models/`
+  - `MainViewModel.cs`: `UpdateCheckStatus`, `TimeEntryDisplayItem`, `ToastNotificationEventArgs`, `ToastType` → eigene Dateien
   - `DashboardViewModel.cs`: `DayOverviewItem`, `DayOverviewState`, `AbsentColleagueItem` → eigene Dateien
-  - Konvention: 1 Klasse = 1 Datei (Ausnahme: eng zusammengehörige Helper-Records)
+  - `MonthlyCalendarViewModel.cs`: `DayCellViewModel`, `DayCellState` → eigene Dateien
+  - `YearlyCalendarViewModel.cs`: `YearlyDayItem`, `MonthAbsenceCard` → eigene Dateien
+  - Alle Models nun in `ViewModels/Models/` (10 Dateien)
 
 ### P2 - Mittlere Priorität (Code Quality)
 
@@ -83,7 +85,7 @@
 
 ### Akzeptierte Technical Debt (dokumentiert, aber bewusst nicht refactored)
 
-- **DashboardViewModel Größe (663 Zeilen):** Kohäsiv, alle Properties gehören zum Dashboard. Wird bei Feature-Erweiterung überprüft.
+- **DashboardViewModel Größe (~525 Zeilen):** Kohäsiv, alle Properties gehören zum Dashboard. Wird bei Feature-Erweiterung überprüft.
 - **KelioService Größe (713 Zeilen):** Cache-Logik ist stark mit Service verbunden. Extraktion nur bei signifikantem Wachstum.
 - **Hardcoded Day Names ("Mo", "Di", etc.):** Deutsche App, Lokalisierung aktuell nicht geplant.
 
@@ -91,3 +93,6 @@
 
 - [x] BoolConverters.cs → Aufgetrennt in BoolConverters.cs, BrushConverters.cs, NavigationConverters.cs, NumericConverters.cs
 - [x] KelioClient.cs (1617 → 535 Zeilen) → Extrahiert: KelioAuthenticator, CalendarAppInitializer, SessionContext, EmployeeIdExtractor, TranslationLoader
+- [x] ViewModels Model-Klassen → 10 Dateien in ViewModels/Models/ extrahiert (2026-01-22)
+- [x] TimeSpanFormatter Utility → Zentrale Zeitformatierung, ersetzt 6+ duplicate Methoden
+- [x] AppColors → Zentrale Farbkonstanten für konsistentes UI-Styling
