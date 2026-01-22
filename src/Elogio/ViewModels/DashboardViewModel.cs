@@ -16,6 +16,7 @@ public partial class DashboardViewModel : ObservableObject
 {
     private readonly IKelioService _kelioService;
     private readonly IToastService _toastService;
+    private readonly IPunchService _punchService;
 
     // Track whether initial data has been loaded (for Singleton pattern)
     private bool _dataLoaded;
@@ -88,20 +89,12 @@ public partial class DashboardViewModel : ObservableObject
 
     #endregion
 
-    #region Punch Button State
+    #region Punch Button State (delegated to PunchService)
 
-    // null = unknown, true = clocked in (show Gehen enabled), false = clocked out (show Kommen enabled)
-    [ObservableProperty]
-    private bool? _punchState;
-
-    [ObservableProperty]
-    private bool _isKommenEnabled;
-
-    [ObservableProperty]
-    private bool _isGehenEnabled;
-
-    [ObservableProperty]
-    private bool _isPunchInProgress;
+    public bool? PunchState => _punchService.PunchState;
+    public bool IsKommenEnabled => _punchService.IsKommenEnabled;
+    public bool IsGehenEnabled => _punchService.IsGehenEnabled;
+    public bool IsPunchInProgress => _punchService.IsPunchInProgress;
 
     #endregion
 
@@ -125,11 +118,25 @@ public partial class DashboardViewModel : ObservableObject
 
     #endregion
 
-    public DashboardViewModel(IKelioService kelioService, IToastService toastService)
+    public DashboardViewModel(IKelioService kelioService, IToastService toastService, IPunchService punchService)
     {
         _kelioService = kelioService;
         _toastService = toastService;
+        _punchService = punchService;
+
+        // Subscribe to punch state changes
+        _punchService.StateChanged += OnPunchStateChanged;
+
         InitializePlaceholderData();
+    }
+
+    private void OnPunchStateChanged(object? sender, EventArgs e)
+    {
+        // Notify UI of all punch-related property changes
+        OnPropertyChanged(nameof(PunchState));
+        OnPropertyChanged(nameof(IsKommenEnabled));
+        OnPropertyChanged(nameof(IsGehenEnabled));
+        OnPropertyChanged(nameof(IsPunchInProgress));
     }
 
     /// <summary>
@@ -359,10 +366,8 @@ public partial class DashboardViewModel : ObservableObject
         // Update time entries display
         UpdateTimeEntriesDisplay(todayData.Entries);
 
-        // Determine current punch state based on number of entries
-        // Odd number of entries = clocked in, Even = clocked out
-        PunchState = todayData.Entries.Count % 2 == 1;
-        UpdatePunchButtonState();
+        // Update punch state based on number of entries
+        _punchService.UpdateStateFromEntryCount(todayData.Entries.Count);
     }
 
     /// <summary>
@@ -416,85 +421,30 @@ public partial class DashboardViewModel : ObservableObject
     /// </summary>
     private async Task ExecutePunchAsync()
     {
-        // Disable buttons during operation
-        IsPunchInProgress = true;
-        UpdatePunchButtonState();
+        var result = await _punchService.PunchAsync();
 
-        try
+        if (result == null)
         {
-            var result = await _kelioService.PunchAsync();
-
-            if (result == null)
-            {
-                ShowToast("Fehler", "Stempeln fehlgeschlagen. Bitte erneut versuchen.", ToastType.Error);
-                return;
-            }
-
-            if (result.Success)
-            {
-                var typeText = result.Type == PunchType.ClockIn ? "Kommen" : "Gehen";
-                var timeText = result.Timestamp?.ToString("HH:mm") ?? "--:--";
-                var message = !string.IsNullOrEmpty(result.Message)
-                    ? result.Message
-                    : $"{typeText} um {timeText}";
-
-                ShowToast(result.Label ?? "Buchung erfolgreich", message, ToastType.Success);
-
-                // Update button state based on punch result
-                PunchState = result.Type == PunchType.ClockIn;
-                UpdatePunchButtonState();
-
-                // Refresh dashboard data
-                await LoadDashboardDataAsync();
-            }
-            else
-            {
-                ShowToast("Fehler", result.Message ?? "Stempeln fehlgeschlagen.", ToastType.Error);
-            }
-        }
-        catch (Exception ex)
-        {
-            ShowToast("Fehler", $"Fehler: {ex.Message}", ToastType.Error);
-        }
-        finally
-        {
-            // Re-enable buttons
-            IsPunchInProgress = false;
-            UpdatePunchButtonState();
-        }
-    }
-
-    /// <summary>
-    /// Update the punch button enabled states based on current state.
-    /// </summary>
-    private void UpdatePunchButtonState()
-    {
-        if (IsPunchInProgress)
-        {
-            IsKommenEnabled = false;
-            IsGehenEnabled = false;
+            ShowToast("Fehler", "Stempeln fehlgeschlagen. Bitte erneut versuchen.", ToastType.Error);
             return;
         }
 
-        switch (PunchState)
+        if (result.Success)
         {
-            case true:
-                // Currently clocked in -> GEHEN is the expected action
-                IsKommenEnabled = false;
-                IsGehenEnabled = true;
-                break;
+            var typeText = result.Type == PunchType.ClockIn ? "Kommen" : "Gehen";
+            var timeText = result.Timestamp?.ToString("HH:mm") ?? "--:--";
+            var message = !string.IsNullOrEmpty(result.Message)
+                ? result.Message
+                : $"{typeText} um {timeText}";
 
-            case false:
-                // Currently clocked out -> KOMMEN is the expected action
-                IsKommenEnabled = true;
-                IsGehenEnabled = false;
-                break;
+            ShowToast(result.Label ?? "Buchung erfolgreich", message, ToastType.Success);
 
-            default:
-                // Unknown state -> both disabled
-                IsKommenEnabled = false;
-                IsGehenEnabled = false;
-                break;
+            // Refresh dashboard data
+            await LoadDashboardDataAsync();
+        }
+        else
+        {
+            ShowToast("Fehler", result.Message ?? "Stempeln fehlgeschlagen.", ToastType.Error);
         }
     }
 
@@ -506,8 +456,7 @@ public partial class DashboardViewModel : ObservableObject
     {
         WeekDays.Clear();
         ResetTodayBalance();
-        PunchState = null;
-        UpdatePunchButtonState();
+        _punchService.Reset();
     }
 
     private void ResetTodayBalance()

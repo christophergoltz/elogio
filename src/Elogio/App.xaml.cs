@@ -123,6 +123,7 @@ public partial class App
         // Services (Singleton)
         services.AddSingleton<ISettingsService, SettingsService>();
         services.AddSingleton<IKelioService, KelioService>();
+        services.AddSingleton<IPunchService, PunchService>();
         services.AddSingleton<INavigationService, NavigationService>();
         services.AddSingleton<IUpdateService, UpdateService>();
         services.AddSingleton<IToastService, ToastService>();
