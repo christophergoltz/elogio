@@ -1,6 +1,7 @@
 using System.Diagnostics;
 using Elogio.Persistence.Api;
 using Elogio.Persistence.Dto;
+using Elogio.Services.Caching;
 using Serilog;
 
 namespace Elogio.Services;
@@ -23,17 +24,9 @@ public class KelioService : IKelioService, IDisposable
     private KelioClient? _client;
     private string? _employeeName;
 
-    // Session-only cache for month data to speed up navigation
-    private readonly Dictionary<(int year, int month), MonthData> _monthCache = new();
-
-    // Session-only cache for absence data
-    private readonly Dictionary<(int year, int month), AbsenceCalendarDto> _absenceCache = new();
-
-    // Track the cached absence date range for smart prefetching
-    private DateOnly? _absenceCacheStart;
-    private DateOnly? _absenceCacheEnd;
-    private bool _absenceCacheInitialized;
-    private readonly object _prefetchLock = new();
+    // Session-only caches for presence and absence data
+    private readonly MonthDataCache _monthCache = new();
+    private readonly AbsenceDataCache _absenceCache = new();
 
     public bool IsAuthenticated => _client?.SessionId != null;
     public string? EmployeeName => _client?.EmployeeName ?? _employeeName;
@@ -93,13 +86,11 @@ public class KelioService : IKelioService, IDisposable
 
     public async Task<MonthData> GetMonthDataAsync(int year, int month)
     {
-        var key = (year, month);
-
         // Check cache first
-        if (_monthCache.TryGetValue(key, out var cached))
+        if (_monthCache.TryGet(year, month, out var cached))
         {
             Log.Information("GetMonthDataAsync: Returning cached data for {Year}-{Month}", year, month);
-            return cached;
+            return cached!;
         }
 
         // Future months have no work time data - return empty immediately without API calls
@@ -111,7 +102,7 @@ public class KelioService : IKelioService, IDisposable
         {
             Log.Information("GetMonthDataAsync: {Year}-{Month} is in the future, returning empty data (no API call)", year, month);
             var emptyData = new MonthData { Year = year, Month = month };
-            _monthCache[key] = emptyData;
+            _monthCache.Set(year, month, emptyData);
             return emptyData;
         }
 
@@ -127,7 +118,7 @@ public class KelioService : IKelioService, IDisposable
         var data = await FetchMonthDataInternalAsync(year, month);
 
         // Store in cache
-        _monthCache[key] = data;
+        _monthCache.Set(year, month, data);
 
         return data;
     }
@@ -139,9 +130,8 @@ public class KelioService : IKelioService, IDisposable
 
         // Prefetch previous month in background
         var (prevYear, prevMonth) = GetPreviousMonth(year, month);
-        var prevKey = (prevYear, prevMonth);
 
-        if (!_monthCache.ContainsKey(prevKey))
+        if (!_monthCache.Contains(prevYear, prevMonth))
         {
             Log.Information("Prefetching previous month {Year}-{Month}", prevYear, prevMonth);
             _ = Task.Run(async () =>
@@ -149,7 +139,7 @@ public class KelioService : IKelioService, IDisposable
                 try
                 {
                     var data = await FetchMonthDataInternalAsync(prevYear, prevMonth);
-                    _monthCache[prevKey] = data;
+                    _monthCache.Set(prevYear, prevMonth, data);
                     Log.Information("Prefetch complete for {Year}-{Month}", prevYear, prevMonth);
                 }
                 catch (Exception ex)
@@ -164,9 +154,6 @@ public class KelioService : IKelioService, IDisposable
     {
         _monthCache.Clear();
         _absenceCache.Clear();
-        _absenceCacheStart = null;
-        _absenceCacheEnd = null;
-        _absenceCacheInitialized = false;
         Log.Information("Month and absence cache cleared");
     }
 
@@ -191,10 +178,8 @@ public class KelioService : IKelioService, IDisposable
 
     public async Task<AbsenceCalendarDto?> GetMonthAbsencesAsync(int year, int month)
     {
-        var key = (year, month);
-
         // Check cache first
-        if (_absenceCache.TryGetValue(key, out var cached))
+        if (_absenceCache.TryGet(year, month, out var cached))
         {
             Log.Information("GetMonthAbsencesAsync: Returning cached data for {Year}-{Month}", year, month);
             return cached;
@@ -218,7 +203,7 @@ public class KelioService : IKelioService, IDisposable
 
             if (data != null)
             {
-                _absenceCache[key] = data;
+                _absenceCache.Set(year, month, data);
                 Log.Information("GetMonthAbsencesAsync: Got {DayCount} days, {VacationCount} vacation, {SickCount} sick leave",
                     data.Days.Count, data.VacationDays.Count(), data.SickLeaveDays.Count());
             }
@@ -239,9 +224,8 @@ public class KelioService : IKelioService, IDisposable
 
         // Prefetch previous month in background
         var (prevYear, prevMonth) = GetPreviousMonth(year, month);
-        var prevKey = (prevYear, prevMonth);
 
-        if (!_absenceCache.ContainsKey(prevKey))
+        if (!_absenceCache.Contains(prevYear, prevMonth))
         {
             Log.Information("Prefetching absences for previous month {Year}-{Month}", prevYear, prevMonth);
             _ = Task.Run(async () =>
@@ -254,7 +238,7 @@ public class KelioService : IKelioService, IDisposable
                     var data = await _client.GetAbsencesAsync(startDate, endDate);
                     if (data != null)
                     {
-                        _absenceCache[prevKey] = data;
+                        _absenceCache.Set(prevYear, prevMonth, data);
                         Log.Information("Absence prefetch complete for {Year}-{Month}", prevYear, prevMonth);
                     }
                 }
@@ -384,24 +368,6 @@ public class KelioService : IKelioService, IDisposable
         return (year, month - 1);
     }
 
-    private static (int year, int month) GetNextMonth(int year, int month)
-    {
-        if (month == 12)
-            return (year + 1, 1);
-        return (year, month + 1);
-    }
-
-    private static (int year, int month) AddMonths(int year, int month, int monthsToAdd)
-    {
-        var date = new DateOnly(year, month, 1).AddMonths(monthsToAdd);
-        return (date.Year, date.Month);
-    }
-
-    private static int MonthDifference(DateOnly from, DateOnly to)
-    {
-        return (to.Year - from.Year) * 12 + (to.Month - from.Month);
-    }
-
     /// <summary>
     /// Calculate the extended date range for absence queries.
     /// Extends beyond month boundaries to cover calendar grid overflow days.
@@ -417,7 +383,7 @@ public class KelioService : IKelioService, IDisposable
 
     public async Task InitializeAbsenceCacheAsync()
     {
-        if (_absenceCacheInitialized)
+        if (_absenceCache.IsInitialized)
         {
             Log.Information("InitializeAbsenceCacheAsync: Cache already initialized");
             return;
@@ -468,16 +434,15 @@ public class KelioService : IKelioService, IDisposable
                             Legend = data.Legend
                         };
 
-                        _absenceCache[(currentMonth.Year, currentMonth.Month)] = monthDto;
+                        _absenceCache.Set(currentMonth.Year, currentMonth.Month, monthDto);
                     }
 
                     currentMonth = currentMonth.AddMonths(1);
                 }
 
                 // Update cache range tracking
-                _absenceCacheStart = startDate;
-                _absenceCacheEnd = endDate;
-                _absenceCacheInitialized = true;
+                _absenceCache.SetCacheRange(startDate, endDate);
+                _absenceCache.MarkInitialized();
 
                 Log.Information("[PERF] InitializeAbsenceCacheAsync: Loaded {DayCount} days across {MonthCount} months in {ElapsedMs}ms",
                     data.Days.Count, _absenceCache.Count, sw.ElapsedMilliseconds);
@@ -491,15 +456,12 @@ public class KelioService : IKelioService, IDisposable
 
     public bool IsAbsenceMonthCached(int year, int month)
     {
-        return _absenceCache.ContainsKey((year, month));
+        return _absenceCache.Contains(year, month);
     }
 
     public (DateOnly start, DateOnly end)? GetAbsenceCacheRange()
     {
-        if (_absenceCacheStart == null || _absenceCacheEnd == null)
-            return null;
-
-        return (_absenceCacheStart.Value, _absenceCacheEnd.Value);
+        return _absenceCache.GetCacheRange();
     }
 
     public void EnsureAbsenceBuffer(int year, int month)
@@ -507,17 +469,19 @@ public class KelioService : IKelioService, IDisposable
         if (_client == null || !IsAuthenticated)
             return;
 
-        if (_absenceCacheStart == null || _absenceCacheEnd == null)
+        var cacheRange = _absenceCache.GetCacheRange();
+        if (cacheRange == null)
         {
             Log.Warning("EnsureAbsenceBuffer: Cache not initialized");
             return;
         }
 
-        var currentMonthDate = new DateOnly(year, month, 1);
+        var (cacheStart, cacheEnd) = cacheRange.Value;
+        var buffer = _absenceCache.GetBufferMonths(year, month);
+        if (buffer == null)
+            return;
 
-        // Calculate buffer in each direction
-        var bufferBackward = MonthDifference(_absenceCacheStart.Value, currentMonthDate);
-        var bufferForward = MonthDifference(currentMonthDate, _absenceCacheEnd.Value);
+        var (bufferBackward, bufferForward) = buffer.Value;
 
         Log.Debug("EnsureAbsenceBuffer: Month {Year}-{Month}, buffer backward={Back}, forward={Fwd}",
             year, month, bufferBackward, bufferForward);
@@ -525,8 +489,8 @@ public class KelioService : IKelioService, IDisposable
         // Check backward buffer
         if (bufferBackward < MinBufferMonths)
         {
-            var prefetchEnd = _absenceCacheStart.Value.AddDays(-1);
-            var prefetchStart = _absenceCacheStart.Value.AddMonths(-PrefetchMonths);
+            var prefetchEnd = cacheStart.AddDays(-1);
+            var prefetchStart = cacheStart.AddMonths(-PrefetchMonths);
 
             Log.Information("EnsureAbsenceBuffer: Buffer backward ({BufferBack}) < {MinBuffer}, prefetching {Start} to {End}",
                 bufferBackward, MinBufferMonths, prefetchStart, prefetchEnd);
@@ -537,8 +501,8 @@ public class KelioService : IKelioService, IDisposable
         // Check forward buffer
         if (bufferForward < MinBufferMonths)
         {
-            var prefetchStart = _absenceCacheEnd.Value.AddDays(1);
-            var prefetchEnd = _absenceCacheEnd.Value.AddMonths(PrefetchMonths);
+            var prefetchStart = cacheEnd.AddDays(1);
+            var prefetchEnd = cacheEnd.AddMonths(PrefetchMonths);
 
             Log.Information("EnsureAbsenceBuffer: Buffer forward ({BufferFwd}) < {MinBuffer}, prefetching {Start} to {End}",
                 bufferForward, MinBufferMonths, prefetchStart, prefetchEnd);
@@ -549,27 +513,9 @@ public class KelioService : IKelioService, IDisposable
 
     private void PrefetchAbsenceRangeAsync(DateOnly startDate, DateOnly endDate, bool isBackward)
     {
-        // Prevent multiple concurrent prefetches
-        lock (_prefetchLock)
-        {
-            // Check if we're already prefetching this range
-            if (isBackward && _absenceCacheStart != null && startDate >= _absenceCacheStart.Value)
-            {
-                Log.Debug("PrefetchAbsenceRangeAsync: Backward prefetch already in progress or not needed");
-                return;
-            }
-            if (!isBackward && _absenceCacheEnd != null && endDate <= _absenceCacheEnd.Value)
-            {
-                Log.Debug("PrefetchAbsenceRangeAsync: Forward prefetch already in progress or not needed");
-                return;
-            }
-
-            // Update range immediately to prevent duplicate prefetches
-            if (isBackward)
-                _absenceCacheStart = startDate;
-            else
-                _absenceCacheEnd = endDate;
-        }
+        // Try to acquire prefetch lock and update range
+        if (!_absenceCache.TryStartPrefetch(startDate, endDate, isBackward))
+            return;
 
         _ = Task.Run(async () =>
         {
@@ -595,7 +541,7 @@ public class KelioService : IKelioService, IDisposable
                             .Where(d => d.Date >= monthStart && d.Date <= monthEnd)
                             .ToList();
 
-                        if (monthDays.Count > 0 && !_absenceCache.ContainsKey((currentMonth.Year, currentMonth.Month)))
+                        if (monthDays.Count > 0 && !_absenceCache.Contains(currentMonth.Year, currentMonth.Month))
                         {
                             var monthDto = new AbsenceCalendarDto
                             {
@@ -606,7 +552,7 @@ public class KelioService : IKelioService, IDisposable
                                 Legend = data.Legend
                             };
 
-                            _absenceCache[(currentMonth.Year, currentMonth.Month)] = monthDto;
+                            _absenceCache.Set(currentMonth.Year, currentMonth.Month, monthDto);
                         }
 
                         currentMonth = currentMonth.AddMonths(1);
@@ -621,13 +567,7 @@ public class KelioService : IKelioService, IDisposable
                 Log.Warning(ex, "PrefetchAbsenceRangeAsync: Failed to prefetch {Start} to {End}", startDate, endDate);
 
                 // Revert the range update on failure
-                lock (_prefetchLock)
-                {
-                    if (isBackward)
-                        _absenceCacheStart = _absenceCacheStart?.AddMonths(PrefetchMonths);
-                    else
-                        _absenceCacheEnd = _absenceCacheEnd?.AddMonths(-PrefetchMonths);
-                }
+                _absenceCache.RevertPrefetch(PrefetchMonths, isBackward);
             }
         });
     }
