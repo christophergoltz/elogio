@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.1.8](https://github.com/christophergoltz/elogio/compare/v0.1.7...v0.1.8) (2026-01-23)
+
+
+### Features
+
+* fix and improve loading times and ui layouts ([#18](https://github.com/christophergoltz/elogio/issues/18)) ([1bfaba8](https://github.com/christophergoltz/elogio/commit/1bfaba83eca10a939faf0603a08e757cf16e1c2e))
+
 ## [0.1.7](https://github.com/christophergoltz/elogio/compare/v0.1.6...v0.1.7) (2026-01-15)
 
 
