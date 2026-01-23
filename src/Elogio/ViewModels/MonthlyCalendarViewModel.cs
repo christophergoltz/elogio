@@ -4,6 +4,7 @@ using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
 using Elogio.Persistence.Dto;
 using Elogio.Services;
+using Elogio.Utilities;
 using Serilog;
 
 namespace Elogio.ViewModels;
@@ -44,24 +45,24 @@ public partial class MonthlyCalendarViewModel : ObservableObject
     /// <summary>
     /// Formatted total worked time (HH:MM).
     /// </summary>
-    public string TotalWorkedDisplay => FormatTimeSpan(TotalWorked);
+    public string TotalWorkedDisplay => TimeSpanFormatter.Format(TotalWorked);
 
     /// <summary>
     /// Formatted total expected time (HH:MM).
     /// </summary>
-    public string TotalExpectedDisplay => FormatTimeSpan(TotalExpected);
+    public string TotalExpectedDisplay => TimeSpanFormatter.Format(TotalExpected);
 
     /// <summary>
     /// Formatted balance with sign (e.g., "-5:30" or "+2:15").
     /// </summary>
-    public string BalanceDisplay => FormatTimeSpanWithSign(Balance);
+    public string BalanceDisplay => TimeSpanFormatter.FormatWithSign(Balance);
 
     /// <summary>
     /// Whether the user can navigate to the next month (always enabled).
     /// </summary>
     public bool CanNavigateNext => true;
 
-    public ObservableCollection<DayCellViewModel> DayCells { get; } = [];
+    public ObservableCollection<Models.DayCellViewModel> DayCells { get; } = [];
     public ObservableCollection<string> DayHeaders { get; } = ["Mo", "Tu", "We", "Th", "Fr", "Sa", "Su"];
 
     public MonthlyCalendarViewModel(IKelioService kelioService)
@@ -77,6 +78,21 @@ public partial class MonthlyCalendarViewModel : ObservableObject
 
     public async Task InitializeAsync()
     {
+        // Start absence cache initialization in background (don't block calendar loading)
+        // This runs in parallel with LoadMonthDataAsync - the first month's absences
+        // will be fetched via GetMonthAbsencesAsync if not yet cached
+        _ = Task.Run(async () =>
+        {
+            try
+            {
+                await _kelioService.InitializeAbsenceCacheAsync();
+            }
+            catch (Exception ex)
+            {
+                Log.Warning(ex, "Background absence cache initialization failed");
+            }
+        });
+
         await LoadMonthDataAsync();
     }
 
@@ -86,6 +102,10 @@ public partial class MonthlyCalendarViewModel : ObservableObject
         Log.Information("LoadMonthDataAsync started for {Year}-{Month}", SelectedYear, SelectedMonth);
         IsLoading = true;
         ErrorMessage = null;
+
+        // Start prefetch for previous month IMMEDIATELY (fire-and-forget)
+        // This runs in parallel so when user navigates back, data is likely already cached
+        _kelioService.PrefetchAdjacentMonths(SelectedYear, SelectedMonth);
 
         try
         {
@@ -126,9 +146,8 @@ public partial class MonthlyCalendarViewModel : ObservableObject
             BuildCalendarGrid(monthData, absences);
             Log.Information("Calendar grid built with {CellCount} cells", DayCells.Count);
 
-            // Prefetch adjacent months for faster navigation
-            _kelioService.PrefetchAdjacentMonths(SelectedYear, SelectedMonth);
-            _kelioService.PrefetchAdjacentMonthAbsences(SelectedYear, SelectedMonth);
+            // Ensure at least 2 months buffer in each direction for absence data
+            _kelioService.EnsureAbsenceBuffer(SelectedYear, SelectedMonth);
         }
         catch (Exception ex)
         {
@@ -312,7 +331,7 @@ public partial class MonthlyCalendarViewModel : ObservableObject
         // Add empty cells for days before the first of the month
         for (var i = 0; i < firstDayOffset; i++)
         {
-            DayCells.Add(new DayCellViewModel { IsCurrentMonth = false });
+            DayCells.Add(new Models.DayCellViewModel { IsCurrentMonth = false });
         }
 
         // Add cells for each day of the month
@@ -323,7 +342,7 @@ public partial class MonthlyCalendarViewModel : ObservableObject
             var isToday = date == today;
             var isFuture = date > today;
 
-            var cell = new DayCellViewModel
+            var cell = new Models.DayCellViewModel
             {
                 DayNumber = day,
                 Date = date,
@@ -381,231 +400,7 @@ public partial class MonthlyCalendarViewModel : ObservableObject
         // Add trailing empty cells to complete the grid (6 rows x 7 columns = 42)
         while (DayCells.Count < 42)
         {
-            DayCells.Add(new DayCellViewModel { IsCurrentMonth = false });
+            DayCells.Add(new Models.DayCellViewModel { IsCurrentMonth = false });
         }
     }
-
-    /// <summary>
-    /// Format a TimeSpan as total hours:minutes (e.g., "50:30" for 50h 30m).
-    /// </summary>
-    private static string FormatTimeSpan(TimeSpan time)
-    {
-        var totalHours = (int)Math.Abs(time.TotalHours);
-        var minutes = Math.Abs(time.Minutes);
-        return $"{totalHours}:{minutes:D2}";
-    }
-
-    /// <summary>
-    /// Format a TimeSpan with sign (e.g., "-5:30" or "+2:15").
-    /// </summary>
-    private static string FormatTimeSpanWithSign(TimeSpan time)
-    {
-        var totalHours = (int)Math.Abs(time.TotalHours);
-        var minutes = Math.Abs(time.Minutes);
-        var sign = time < TimeSpan.Zero ? "-" : "+";
-        // Don't show + for zero
-        if (time == TimeSpan.Zero) sign = "";
-        return $"{sign}{totalHours}:{minutes:D2}";
-    }
-}
-
-public partial class DayCellViewModel : ObservableObject
-{
-    [ObservableProperty]
-    private int _dayNumber;
-
-    [ObservableProperty]
-    private DateOnly _date;
-
-    [ObservableProperty]
-    private bool _isCurrentMonth;
-
-    [ObservableProperty]
-    private bool _isToday;
-
-    [ObservableProperty]
-    private bool _isWeekend;
-
-    [ObservableProperty]
-    private bool _isFuture;
-
-    [ObservableProperty]
-    private bool _isSelected;
-
-    [ObservableProperty]
-    private TimeSpan _workedTime;
-
-    [ObservableProperty]
-    private TimeSpan _expectedTime;
-
-    [ObservableProperty]
-    private DayCellState _state = DayCellState.Empty;
-
-    // Absence properties
-    [ObservableProperty]
-    [NotifyPropertyChangedFor(nameof(HasDisplayableAbsence))]
-    private AbsenceType _absenceType = AbsenceType.None;
-
-    [ObservableProperty]
-    private string? _absenceLabel;
-
-    [ObservableProperty]
-    private string? _absenceBorderColor;
-
-    /// <summary>
-    /// Whether this day is a half holiday in combination with another absence type (e.g., Vacation + HalfHoliday).
-    /// Used to show an additional visual indicator.
-    /// </summary>
-    [ObservableProperty]
-    private bool _isHalfHolidayCombined;
-
-    /// <summary>
-    /// Whether this day has an absence that should display a label.
-    /// Excludes None, weekends, and unknown types.
-    /// </summary>
-    public bool HasDisplayableAbsence =>
-        AbsenceType != AbsenceType.None &&
-        AbsenceType != AbsenceType.Weekend &&
-        AbsenceType != AbsenceType.Unknown;
-
-    /// <summary>
-    /// Whether this is a full-day absence where no work is expected.
-    /// </summary>
-    public bool IsFullDayAbsence =>
-        AbsenceType is AbsenceType.Vacation or AbsenceType.SickLeave or AbsenceType.PublicHoliday;
-
-    /// <summary>
-    /// Simple worked time display (e.g., "7:30" or "--").
-    /// </summary>
-    public string WorkedTimeDisplay => WorkedTime == TimeSpan.Zero ? "--" : FormatTime(WorkedTime);
-
-    /// <summary>
-    /// Worked time display (e.g., "6:15" or "--").
-    /// </summary>
-    public string WorkedDisplay
-    {
-        get
-        {
-            if (!IsCurrentMonth || IsFuture) return "";
-            if (IsWeekend || IsFullDayAbsence || ExpectedTime == TimeSpan.Zero) return "--";
-            if (WorkedTime == TimeSpan.Zero) return "--";
-            return FormatTime(WorkedTime);
-        }
-    }
-
-    /// <summary>
-    /// Expected time display (e.g., "/ 7:00").
-    /// </summary>
-    public string ExpectedDisplay
-    {
-        get
-        {
-            if (!IsCurrentMonth || IsFuture) return "";
-            if (IsWeekend || IsFullDayAbsence || ExpectedTime == TimeSpan.Zero) return "";
-            return $"/ {FormatTime(ExpectedTime)}";
-        }
-    }
-
-    /// <summary>
-    /// Legacy TimeDisplay for compatibility.
-    /// </summary>
-    public string TimeDisplay
-    {
-        get
-        {
-            if (!IsCurrentMonth || IsFuture) return "";
-            if (IsWeekend || IsFullDayAbsence || ExpectedTime == TimeSpan.Zero) return "--";
-            if (WorkedTime == TimeSpan.Zero && ExpectedTime > TimeSpan.Zero)
-                return $"-- / {FormatTime(ExpectedTime)}";
-
-            return $"{FormatTime(WorkedTime)} / {FormatTime(ExpectedTime)}";
-        }
-    }
-
-    /// <summary>
-    /// Difference display on separate line (e.g., "(+0:17)" or "(-30 min)").
-    /// </summary>
-    public string DifferenceDisplay
-    {
-        get
-        {
-            if (!IsCurrentMonth || IsFuture || IsWeekend || ExpectedTime == TimeSpan.Zero) return "";
-            // No difference display for missing entries - shown as "!" indicator instead
-            if (WorkedTime == TimeSpan.Zero && ExpectedTime > TimeSpan.Zero) return "";
-
-            var diff = WorkedTime - ExpectedTime;
-            if (diff == TimeSpan.Zero) return "";
-            var sign = diff >= TimeSpan.Zero ? "+" : "";
-            return $"({sign}{FormatDiff(diff)})";
-        }
-    }
-
-    public void UpdateState()
-    {
-        if (!IsCurrentMonth)
-        {
-            State = DayCellState.Empty;
-            return;
-        }
-        if (IsWeekend)
-        {
-            State = DayCellState.Weekend;
-            return;
-        }
-        if (IsFuture)
-        {
-            State = DayCellState.Future;
-            return;
-        }
-        if (ExpectedTime == TimeSpan.Zero)
-        {
-            State = DayCellState.NoWork;
-            return;
-        }
-
-        // Full-day absences (vacation, sick leave) - treat like NoWork, don't show as missing entry
-        if (AbsenceType is AbsenceType.Vacation or AbsenceType.SickLeave or AbsenceType.PublicHoliday)
-        {
-            State = DayCellState.NoWork;
-            return;
-        }
-
-        // Missing entry: expected time but nothing booked
-        if (WorkedTime == TimeSpan.Zero && ExpectedTime > TimeSpan.Zero)
-        {
-            State = DayCellState.MissingEntry;
-            return;
-        }
-
-        if (WorkedTime >= ExpectedTime)
-        {
-            State = WorkedTime > ExpectedTime ? DayCellState.OverHours : DayCellState.Normal;
-        }
-        else
-        {
-            State = DayCellState.UnderHours;
-        }
-    }
-
-    private static string FormatTime(TimeSpan t) => $"{(int)t.TotalHours}:{Math.Abs(t.Minutes):D2}";
-
-    private static string FormatDiff(TimeSpan t)
-    {
-        var totalMinutes = (int)t.TotalMinutes;
-        if (Math.Abs(totalMinutes) < 60)
-            return $"{totalMinutes} min";
-        return FormatTime(t);
-    }
-}
-
-public enum DayCellState
-{
-    Empty,
-    Normal,
-    OverHours,
-    UnderHours,
-    MissingEntry,  // Expected > 0 but no time booked
-    Weekend,
-    Future,
-    NoWork
 }

@@ -1,0 +1,299 @@
+<Page x:Class="Elogio.Views.Pages.YearlyCalendarPage"
+      xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+      xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+      xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
+      xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
+      xmlns:ui="http://schemas.lepo.co/wpfui/2022/xaml"
+      xmlns:vm="clr-namespace:Elogio.ViewModels"
+      xmlns:dto="clr-namespace:Elogio.Persistence.Dto;assembly=Elogio.Persistence"
+      xmlns:models="clr-namespace:Elogio.ViewModels.Models"
+      mc:Ignorable="d"
+      d:DesignHeight="800" d:DesignWidth="1000"
+      Title="Yearly Calendar"
+      Loaded="Page_Loaded" d:DataContext="{d:DesignInstance vm:YearlyCalendarViewModel}">
+
+    <Grid Margin="24">
+        <Grid.RowDefinitions>
+            <RowDefinition Height="Auto" />
+            <RowDefinition Height="Auto" />
+            <RowDefinition Height="*" />
+            <RowDefinition Height="Auto" />
+        </Grid.RowDefinitions>
+
+        <!-- Year Navigator -->
+        <Grid Grid.Row="0" Margin="0,0,0,16">
+            <Grid.ColumnDefinitions>
+                <ColumnDefinition Width="Auto" />
+                <ColumnDefinition Width="*" />
+                <ColumnDefinition Width="Auto" />
+            </Grid.ColumnDefinitions>
+
+            <ui:Button Grid.Column="0"
+                       Command="{Binding PreviousYearCommand}"
+                       Appearance="Secondary">
+                <ui:Button.Icon>
+                    <ui:SymbolIcon Symbol="ChevronLeft24" />
+                </ui:Button.Icon>
+            </ui:Button>
+
+            <StackPanel Grid.Column="1" HorizontalAlignment="Center" Orientation="Horizontal">
+                <TextBlock Text="{Binding YearDisplay}"
+                           FontSize="28"
+                           FontWeight="SemiBold"
+                           VerticalAlignment="Center"
+                           Foreground="{ui:ThemeResource TextFillColorPrimaryBrush}" />
+                <ui:Button Content="Aktuelles Jahr"
+                           Command="{Binding GoToCurrentYearCommand}"
+                           Appearance="Secondary"
+                           Margin="16,0,0,0" />
+            </StackPanel>
+
+            <ui:Button Grid.Column="2"
+                       Command="{Binding NextYearCommand}"
+                       Appearance="Secondary">
+                <ui:Button.Icon>
+                    <ui:SymbolIcon Symbol="ChevronRight24" />
+                </ui:Button.Icon>
+            </ui:Button>
+        </Grid>
+
+        <!-- Legend -->
+        <StackPanel Grid.Row="1" Orientation="Horizontal" HorizontalAlignment="Center" Margin="0,0,0,16">
+            <StackPanel Orientation="Horizontal" Margin="0,0,24,0">
+                <Border Width="16" Height="16" Background="#00BCD4" CornerRadius="2" Margin="0,0,6,0" />
+                <TextBlock Text="Urlaub" VerticalAlignment="Center" FontSize="12"
+                           Foreground="{ui:ThemeResource TextFillColorSecondaryBrush}" />
+            </StackPanel>
+            <StackPanel Orientation="Horizontal" Margin="0,0,24,0">
+                <Border Width="16" Height="16" Background="#F44336" CornerRadius="2" Margin="0,0,6,0" />
+                <TextBlock Text="Krank" VerticalAlignment="Center" FontSize="12"
+                           Foreground="{ui:ThemeResource TextFillColorSecondaryBrush}" />
+            </StackPanel>
+            <StackPanel Orientation="Horizontal" Margin="0,0,24,0">
+                <Border Width="16" Height="16" Background="#9E9E9E" CornerRadius="2" Margin="0,0,6,0" />
+                <TextBlock Text="Feiertag" VerticalAlignment="Center" FontSize="12"
+                           Foreground="{ui:ThemeResource TextFillColorSecondaryBrush}" />
+            </StackPanel>
+            <StackPanel Orientation="Horizontal">
+                <Border Width="16" Height="16" Background="#FFEB3B" CornerRadius="2" Margin="0,0,6,0" />
+                <TextBlock Text="Halber Feiertag" VerticalAlignment="Center" FontSize="12"
+                           Foreground="{ui:ThemeResource TextFillColorSecondaryBrush}" />
+            </StackPanel>
+        </StackPanel>
+
+        <!-- Month Cards Card with Loading Overlay -->
+        <Grid Grid.Row="2">
+            <!-- Loading Overlay (outside Card to cover entire area) -->
+            <Grid Visibility="{Binding IsLoading, Converter={StaticResource BoolToVisibilityConverter}}"
+                  Panel.ZIndex="1">
+                <Border Background="{ui:ThemeResource ApplicationBackgroundBrush}"
+                        Opacity="0.9"
+                        CornerRadius="8" />
+                <ui:ProgressRing IsIndeterminate="True"
+                                 Width="32"
+                                 Height="32"
+                                 HorizontalAlignment="Center"
+                                 VerticalAlignment="Center" />
+            </Grid>
+
+            <ui:Card Padding="8">
+                <!-- Month Cards Grid (4x3) -->
+                <ScrollViewer VerticalScrollBarVisibility="Auto">
+                    <ItemsControl ItemsSource="{Binding Months}">
+                <ItemsControl.ItemsPanel>
+                    <ItemsPanelTemplate>
+                        <UniformGrid Rows="4" Columns="3" />
+                    </ItemsPanelTemplate>
+                </ItemsControl.ItemsPanel>
+                <ItemsControl.ItemTemplate>
+                    <DataTemplate DataType="{x:Type models:MonthAbsenceCard}">
+                        <ui:Card Margin="6" Padding="8">
+                            <Grid>
+                                <Grid.RowDefinitions>
+                                    <RowDefinition Height="Auto" />
+                                    <RowDefinition Height="Auto" />
+                                    <RowDefinition Height="*" />
+                                    <RowDefinition Height="Auto" />
+                                </Grid.RowDefinitions>
+
+                                <!-- Month Name -->
+                                <TextBlock Grid.Row="0"
+                                           Text="{Binding MonthName}"
+                                           FontSize="14"
+                                           FontWeight="SemiBold"
+                                           HorizontalAlignment="Center"
+                                           Margin="0,0,0,4"
+                                           Foreground="{ui:ThemeResource TextFillColorPrimaryBrush}" />
+
+                                <!-- Day Headers -->
+                                <Grid Grid.Row="1" Margin="0,0,0,2">
+                                    <Grid.ColumnDefinitions>
+                                        <ColumnDefinition Width="*" />
+                                        <ColumnDefinition Width="*" />
+                                        <ColumnDefinition Width="*" />
+                                        <ColumnDefinition Width="*" />
+                                        <ColumnDefinition Width="*" />
+                                        <ColumnDefinition Width="*" />
+                                        <ColumnDefinition Width="*" />
+                                    </Grid.ColumnDefinitions>
+                                    <TextBlock Grid.Column="0" Text="M" FontSize="8" HorizontalAlignment="Center"
+                                               Foreground="{ui:ThemeResource TextFillColorTertiaryBrush}" />
+                                    <TextBlock Grid.Column="1" Text="D" FontSize="8" HorizontalAlignment="Center"
+                                               Foreground="{ui:ThemeResource TextFillColorTertiaryBrush}" />
+                                    <TextBlock Grid.Column="2" Text="M" FontSize="8" HorizontalAlignment="Center"
+                                               Foreground="{ui:ThemeResource TextFillColorTertiaryBrush}" />
+                                    <TextBlock Grid.Column="3" Text="D" FontSize="8" HorizontalAlignment="Center"
+                                               Foreground="{ui:ThemeResource TextFillColorTertiaryBrush}" />
+                                    <TextBlock Grid.Column="4" Text="F" FontSize="8" HorizontalAlignment="Center"
+                                               Foreground="{ui:ThemeResource TextFillColorTertiaryBrush}" />
+                                    <TextBlock Grid.Column="5" Text="S" FontSize="8" HorizontalAlignment="Center"
+                                               Foreground="{ui:ThemeResource TextFillColorTertiaryBrush}" />
+                                    <TextBlock Grid.Column="6" Text="S" FontSize="8" HorizontalAlignment="Center"
+                                               Foreground="{ui:ThemeResource TextFillColorTertiaryBrush}" />
+                                </Grid>
+
+                                <!-- Mini Calendar Grid -->
+                                <ItemsControl Grid.Row="2" ItemsSource="{Binding Days}">
+                                    <ItemsControl.ItemsPanel>
+                                        <ItemsPanelTemplate>
+                                            <UniformGrid Rows="6" Columns="7" />
+                                        </ItemsPanelTemplate>
+                                    </ItemsControl.ItemsPanel>
+                                    <ItemsControl.ItemTemplate>
+                                        <DataTemplate DataType="{x:Type models:YearlyDayItem}">
+                                            <Border Margin="1" CornerRadius="2" MinHeight="14" MinWidth="14">
+                                                <Border.Style>
+                                                    <Style TargetType="Border">
+                                                        <Setter Property="Background" Value="Transparent" />
+                                                        <Style.Triggers>
+                                                            <DataTrigger Binding="{Binding IsCurrentMonth}" Value="False">
+                                                                <Setter Property="Opacity" Value="0" />
+                                                            </DataTrigger>
+                                                            <DataTrigger Binding="{Binding IsWeekend}" Value="True">
+                                                                <Setter Property="Background" Value="{ui:ThemeResource ControlFillColorSecondaryBrush}" />
+                                                            </DataTrigger>
+                                                            <DataTrigger Binding="{Binding IsToday}" Value="True">
+                                                                <Setter Property="BorderBrush" Value="{ui:ThemeResource SystemAccentColorPrimaryBrush}" />
+                                                                <Setter Property="BorderThickness" Value="1" />
+                                                            </DataTrigger>
+                                                            <!-- Absence colors -->
+                                                            <DataTrigger Binding="{Binding AbsenceType}" Value="{x:Static dto:AbsenceType.Vacation}">
+                                                                <Setter Property="Background" Value="#00BCD4" />
+                                                            </DataTrigger>
+                                                            <DataTrigger Binding="{Binding AbsenceType}" Value="{x:Static dto:AbsenceType.SickLeave}">
+                                                                <Setter Property="Background" Value="#F44336" />
+                                                            </DataTrigger>
+                                                            <DataTrigger Binding="{Binding AbsenceType}" Value="{x:Static dto:AbsenceType.PublicHoliday}">
+                                                                <Setter Property="Background" Value="#9E9E9E" />
+                                                            </DataTrigger>
+                                                            <DataTrigger Binding="{Binding AbsenceType}" Value="{x:Static dto:AbsenceType.HalfHoliday}">
+                                                                <Setter Property="Background" Value="#FFEB3B" />
+                                                            </DataTrigger>
+                                                        </Style.Triggers>
+                                                    </Style>
+                                                </Border.Style>
+                                                <TextBlock Text="{Binding DayNumber}"
+                                                           FontSize="8"
+                                                           HorizontalAlignment="Center"
+                                                           VerticalAlignment="Center">
+                                                    <TextBlock.Style>
+                                                        <Style TargetType="TextBlock">
+                                                            <Setter Property="Foreground" Value="{ui:ThemeResource TextFillColorPrimaryBrush}" />
+                                                            <Style.Triggers>
+                                                                <DataTrigger Binding="{Binding IsCurrentMonth}" Value="False">
+                                                                    <Setter Property="Visibility" Value="Collapsed" />
+                                                                </DataTrigger>
+                                                                <DataTrigger Binding="{Binding HasAbsence}" Value="True">
+                                                                    <Setter Property="Foreground" Value="White" />
+                                                                </DataTrigger>
+                                                            </Style.Triggers>
+                                                        </Style>
+                                                    </TextBlock.Style>
+                                                </TextBlock>
+                                            </Border>
+                                        </DataTemplate>
+                                    </ItemsControl.ItemTemplate>
+                                </ItemsControl>
+
+                                <!-- Month Summary -->
+                                <TextBlock Grid.Row="3"
+                                           Text="{Binding AbsenceSummary}"
+                                           FontSize="9"
+                                           HorizontalAlignment="Center"
+                                           Margin="0,4,0,0"
+                                           TextWrapping="Wrap"
+                                           TextAlignment="Center"
+                                           Foreground="{ui:ThemeResource TextFillColorTertiaryBrush}" />
+                            </Grid>
+                        </ui:Card>
+                    </DataTemplate>
+                </ItemsControl.ItemTemplate>
+                    </ItemsControl>
+                </ScrollViewer>
+            </ui:Card>
+        </Grid>
+
+        <!-- Year Summary -->
+        <ui:Card Grid.Row="3" Margin="0,16,0,0" Padding="16">
+            <Grid>
+                <Grid.ColumnDefinitions>
+                    <ColumnDefinition Width="*" />
+                    <ColumnDefinition Width="*" />
+                    <ColumnDefinition Width="*" />
+                </Grid.ColumnDefinitions>
+
+                <StackPanel Grid.Column="0" HorizontalAlignment="Center">
+                    <TextBlock Text="Urlaub"
+                               FontSize="12"
+                               Foreground="{ui:ThemeResource TextFillColorSecondaryBrush}"
+                               HorizontalAlignment="Center" />
+                    <TextBlock FontSize="24"
+                               FontWeight="SemiBold"
+                               Foreground="#00BCD4"
+                               HorizontalAlignment="Center">
+                        <Run Text="{Binding TotalVacationDays}" />
+                        <Run Text=" Tage" FontSize="14" FontWeight="Normal" />
+                    </TextBlock>
+                </StackPanel>
+
+                <StackPanel Grid.Column="1" HorizontalAlignment="Center">
+                    <TextBlock Text="Krank"
+                               FontSize="12"
+                               Foreground="{ui:ThemeResource TextFillColorSecondaryBrush}"
+                               HorizontalAlignment="Center" />
+                    <TextBlock FontSize="24"
+                               FontWeight="SemiBold"
+                               Foreground="#F44336"
+                               HorizontalAlignment="Center">
+                        <Run Text="{Binding TotalSickDays}" />
+                        <Run Text=" Tage" FontSize="14" FontWeight="Normal" />
+                    </TextBlock>
+                </StackPanel>
+
+                <StackPanel Grid.Column="2" HorizontalAlignment="Center">
+                    <TextBlock Text="Feiertage"
+                               FontSize="12"
+                               Foreground="{ui:ThemeResource TextFillColorSecondaryBrush}"
+                               HorizontalAlignment="Center" />
+                    <TextBlock FontSize="24"
+                               FontWeight="SemiBold"
+                               Foreground="#9E9E9E"
+                               HorizontalAlignment="Center">
+                        <Run Text="{Binding TotalHolidays}" />
+                        <Run Text=" Tage" FontSize="14" FontWeight="Normal" />
+                    </TextBlock>
+                </StackPanel>
+            </Grid>
+        </ui:Card>
+
+        <!-- Error message -->
+        <ui:InfoBar Grid.Row="3"
+                    Title="Fehler"
+                    Message="{Binding ErrorMessage}"
+                    Severity="Error"
+                    IsOpen="{Binding ErrorMessage, Converter={StaticResource NullToVisibilityConverter}}"
+                    IsClosable="True"
+                    Margin="0,16,0,0"
+                    Visibility="{Binding ErrorMessage, Converter={StaticResource NullToVisibilityConverter}}" />
+    </Grid>
+</Page>

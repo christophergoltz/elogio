@@ -24,6 +24,12 @@ public interface IKelioService
     int? EmployeeId { get; }
 
     /// <summary>
+    /// Pre-initialize the Kelio client for faster login.
+    /// Call this early (e.g., when login page is shown) to start curl_proxy server.
+    /// </summary>
+    Task PreInitializeAsync(string serverUrl);
+
+    /// <summary>
     /// Authenticate with Kelio server.
     /// </summary>
     Task<bool> LoginAsync(string serverUrl, string username, string password);
@@ -70,6 +76,43 @@ public interface IKelioService
     /// Fire-and-forget operation.
     /// </summary>
     void PrefetchAdjacentMonthAbsences(int year, int month);
+
+    /// <summary>
+    /// Initialize the absence cache with 19 months of data (today -6 months to +12 months).
+    /// Should be called once when the calendar is first opened.
+    /// </summary>
+    Task InitializeAbsenceCacheAsync();
+
+    /// <summary>
+    /// Check if absence data for a specific month is in the cache.
+    /// </summary>
+    bool IsAbsenceMonthCached(int year, int month);
+
+    /// <summary>
+    /// Get the current cached absence date range.
+    /// Returns null if cache is empty.
+    /// </summary>
+    (DateOnly start, DateOnly end)? GetAbsenceCacheRange();
+
+    /// <summary>
+    /// Ensure at least MIN_BUFFER_MONTHS (2) months of absence data are cached
+    /// in both directions from the specified month. Triggers background prefetch if needed.
+    /// </summary>
+    void EnsureAbsenceBuffer(int year, int month);
+
+    /// <summary>
+    /// Start background prefetch of absence and calendar data after successful login.
+    /// This is a fire-and-forget operation to improve perceived performance.
+    /// </summary>
+    void StartPostLoginPrefetch();
+
+    /// <summary>
+    /// Get colleague absence data from the group calendar for a specific month.
+    /// </summary>
+    /// <param name="year">The year</param>
+    /// <param name="month">The month (1-12)</param>
+    /// <returns>List of colleague absences, or empty list if failed</returns>
+    Task<List<ColleagueAbsenceDto>> GetColleagueAbsencesAsync(int year, int month);
 }
 
 /// <summary>

@@ -6,21 +6,13 @@
       xmlns:ui="http://schemas.lepo.co/wpfui/2022/xaml"
       xmlns:vm="clr-namespace:Elogio.ViewModels"
       xmlns:dto="clr-namespace:Elogio.Persistence.Dto;assembly=Elogio.Persistence"
+      xmlns:models="clr-namespace:Elogio.ViewModels.Models"
       mc:Ignorable="d"
       d:DesignHeight="700" d:DesignWidth="900"
       Title="Monthly Calendar"
       Loaded="Page_Loaded" d:DataContext="{d:DesignInstance vm:MonthlyCalendarViewModel}">
 
     <Page.Resources>
-        <!-- Day cell state to background color -->
-        <Style TargetType="Border">
-            <Setter Property="BorderBrush" Value="{ui:ThemeResource ControlStrokeColorDefaultBrush}" />
-            <Setter Property="BorderThickness" Value="1" />
-            <Setter Property="CornerRadius" Value="4" />
-            <Setter Property="Margin" Value="2" />
-            <Setter Property="Padding" Value="4" />
-        </Style>
-
         <!-- Diagonal stripe pattern for half holidays -->
         <DrawingBrush x:Key="HalfHolidayStripeBrush"
                       TileMode="Tile"
@@ -87,53 +79,61 @@
             </StackPanel>
         </Grid>
 
-        <!-- Day Headers -->
-        <ItemsControl Grid.Row="1" ItemsSource="{Binding DayHeaders}" Margin="0,0,0,8">
-            <ItemsControl.ItemsPanel>
-                <ItemsPanelTemplate>
-                    <UniformGrid Rows="1" Columns="7" />
-                </ItemsPanelTemplate>
-            </ItemsControl.ItemsPanel>
-            <ItemsControl.ItemTemplate>
-                <DataTemplate>
-                    <TextBlock Text="{Binding}"
-                               HorizontalAlignment="Center"
-                               FontWeight="SemiBold"
-                               Foreground="{ui:ThemeResource TextFillColorSecondaryBrush}" />
-                </DataTemplate>
-            </ItemsControl.ItemTemplate>
-        </ItemsControl>
-
-        <!-- Calendar Grid -->
-        <Grid Grid.Row="2" Margin="0,0,0,4" ClipToBounds="False">
-            <!-- Loading overlay -->
+        <!-- Calendar Card (Day Headers + Calendar Grid) -->
+        <Grid Grid.Row="1" Grid.RowSpan="2">
+            <!-- Loading Overlay (outside Card to cover entire area) -->
             <Grid Visibility="{Binding IsLoading, Converter={StaticResource BoolToVisibilityConverter}}"
                   Panel.ZIndex="1">
-                <Border Background="{ui:ThemeResource ApplicationBackgroundBrush}" Opacity="0.8" />
-                <StackPanel VerticalAlignment="Center" HorizontalAlignment="Center">
-                    <ui:ProgressRing IsIndeterminate="True" Width="50" Height="50" />
-                    <TextBlock Text="Loading..." Margin="0,16,0,0" />
-                </StackPanel>
+                <Border Background="{ui:ThemeResource ApplicationBackgroundBrush}"
+                        Opacity="0.9"
+                        CornerRadius="8" />
+                <ui:ProgressRing IsIndeterminate="True"
+                                 Width="32"
+                                 Height="32"
+                                 HorizontalAlignment="Center"
+                                 VerticalAlignment="Center" />
             </Grid>
 
-            <!-- Calendar cells -->
-            <ItemsControl ItemsSource="{Binding DayCells}"
-                          Visibility="{Binding IsLoading, Converter={StaticResource InverseBoolToVisibilityConverter}}">
+            <Grid>
+                <Grid.RowDefinitions>
+                    <RowDefinition Height="Auto" />
+                    <RowDefinition Height="*" />
+                </Grid.RowDefinitions>
+
+                <!-- Day Headers -->
+                <ItemsControl Grid.Row="0" ItemsSource="{Binding DayHeaders}" Margin="0,0,0,8">
+                    <ItemsControl.ItemsPanel>
+                        <ItemsPanelTemplate>
+                            <UniformGrid Rows="1" Columns="7" />
+                        </ItemsPanelTemplate>
+                    </ItemsControl.ItemsPanel>
+                    <ItemsControl.ItemTemplate>
+                        <DataTemplate>
+                            <TextBlock Text="{Binding}"
+                                       HorizontalAlignment="Center"
+                                       FontWeight="SemiBold"
+                                       Foreground="{ui:ThemeResource TextFillColorSecondaryBrush}" />
+                        </DataTemplate>
+                    </ItemsControl.ItemTemplate>
+                </ItemsControl>
+
+                <!-- Calendar cells -->
+                <ItemsControl Grid.Row="1" ItemsSource="{Binding DayCells}">
                 <ItemsControl.ItemsPanel>
                     <ItemsPanelTemplate>
                         <UniformGrid Rows="6" Columns="7" />
                     </ItemsPanelTemplate>
                 </ItemsControl.ItemsPanel>
                 <ItemsControl.ItemTemplate>
-                    <DataTemplate DataType="{x:Type vm:DayCellViewModel}">
+                    <DataTemplate DataType="{x:Type models:DayCellViewModel}">
                         <Border Margin="2"
                                 CornerRadius="4"
-                                BorderThickness="1"
                                 Padding="5">
                             <Border.Style>
                                 <Style TargetType="Border">
                                     <Setter Property="Background" Value="Transparent" />
                                     <Setter Property="BorderBrush" Value="{ui:ThemeResource ControlStrokeColorDefaultBrush}" />
+                                    <Setter Property="BorderThickness" Value="1" />
                                     <Style.Triggers>
                                         <DataTrigger Binding="{Binding IsCurrentMonth}" Value="False">
                                             <Setter Property="Opacity" Value="0.3" />
@@ -161,7 +161,7 @@
                                         <DataTrigger Binding="{Binding AbsenceType}" Value="{x:Static dto:AbsenceType.HalfHoliday}">
                                             <Setter Property="Background" Value="{StaticResource HalfHolidayStripeBrush}" />
                                         </DataTrigger>
-                                        <DataTrigger Binding="{Binding State}" Value="{x:Static vm:DayCellState.MissingEntry}">
+                                        <DataTrigger Binding="{Binding State}" Value="{x:Static models:DayCellState.MissingEntry}">
                                             <Setter Property="Background" Value="#33F44336" />
                                         </DataTrigger>
                                     </Style.Triggers>
@@ -250,10 +250,10 @@
                                                         <DataTrigger Binding="{Binding IsCurrentMonth}" Value="False">
                                                             <Setter Property="Visibility" Value="Collapsed" />
                                                         </DataTrigger>
-                                                        <DataTrigger Binding="{Binding State}" Value="{x:Static vm:DayCellState.OverHours}">
+                                                        <DataTrigger Binding="{Binding State}" Value="{x:Static models:DayCellState.OverHours}">
                                                             <Setter Property="Foreground" Value="#4CAF50" />
                                                         </DataTrigger>
-                                                        <DataTrigger Binding="{Binding State}" Value="{x:Static vm:DayCellState.UnderHours}">
+                                                        <DataTrigger Binding="{Binding State}" Value="{x:Static models:DayCellState.UnderHours}">
                                                             <Setter Property="Foreground" Value="#F44336" />
                                                         </DataTrigger>
                                                     </Style.Triggers>
@@ -292,6 +292,7 @@
                 </DataTemplate>
                 </ItemsControl.ItemTemplate>
             </ItemsControl>
+            </Grid>
         </Grid>
 
         <!-- Summary -->

@@ -29,6 +29,7 @@
     <PackageVersion Include="Shouldly" Version="4.3.0" />
     <PackageVersion Include="Microsoft.Extensions.Configuration.UserSecrets" Version="9.0.0" />
     <PackageVersion Include="Microsoft.Extensions.Configuration.EnvironmentVariables" Version="9.0.0" />
+    <PackageVersion Include="Serilog.Sinks.XUnit" Version="3.0.5" />
   </ItemGroup>
   <ItemGroup Label="Analyzers">
     <PackageVersion Include="Roslynator.Analyzers" Version="4.12.11" />

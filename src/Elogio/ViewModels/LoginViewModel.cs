@@ -104,6 +104,10 @@ public partial class LoginViewModel : ObservableObject
             if (success)
             {
                 SaveSettings();
+
+                // Start background prefetch of calendar and absence data
+                _kelioService.StartPostLoginPrefetch();
+
                 LoginSuccessful?.Invoke(this, EventArgs.Empty);
             }
             else

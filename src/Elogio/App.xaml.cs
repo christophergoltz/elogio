@@ -58,11 +58,18 @@ public partial class App
             Log.Information("Attempting auto-login for user {Username}", settings.Username);
 
             // Show loading overlay in main window (faster than separate window)
-            mainWindow.ShowLoading();
+            mainWindow.ShowLoading("Starting...");
 
             try
             {
                 var kelioService = Services.GetRequiredService<IKelioService>();
+
+                // Pre-initialize server + prefetch login page while showing loading screen
+                // This saves ~4.6s of perceived login time
+                mainWindow.UpdateLoadingStatus("Initializing connection...");
+                await kelioService.PreInitializeAsync(settings.ServerUrl);
+
+                mainWindow.UpdateLoadingStatus("Logging in...");
                 var success = await kelioService.LoginAsync(settings.ServerUrl, settings.Username, settings.Password);
 
                 mainWindow.HideLoading();
@@ -70,6 +77,10 @@ public partial class App
                 if (success)
                 {
                     Log.Information("Auto-login successful");
+
+                    // Start background prefetch of calendar and absence data
+                    kelioService.StartPostLoginPrefetch();
+
                     mainWindow.NavigateToMain();
                 }
                 else
@@ -97,13 +108,30 @@ public partial class App
     protected override void OnExit(ExitEventArgs e)
     {
         Log.Information("Elogio shutting down");
-        Log.CloseAndFlush();
 
+        // Dispose services with a timeout to prevent hanging on shutdown
         if (_serviceProvider is IDisposable disposable)
         {
-            disposable.Dispose();
+            var disposeTask = Task.Run(() =>
+            {
+                try
+                {
+                    disposable.Dispose();
+                }
+                catch (Exception ex)
+                {
+                    Log.Warning(ex, "Error during service provider dispose");
+                }
+            });
+
+            // Wait max 5 seconds for cleanup, then force exit
+            if (!disposeTask.Wait(TimeSpan.FromSeconds(5)))
+            {
+                Log.Warning("Service provider dispose timed out after 5 seconds - forcing exit");
+            }
         }
 
+        Log.CloseAndFlush();
         base.OnExit(e);
     }
 
@@ -112,18 +140,24 @@ public partial class App
         // Services (Singleton)
         services.AddSingleton<ISettingsService, SettingsService>();
         services.AddSingleton<IKelioService, KelioService>();
+        services.AddSingleton<IPunchService, PunchService>();
         services.AddSingleton<INavigationService, NavigationService>();
         services.AddSingleton<IUpdateService, UpdateService>();
+        services.AddSingleton<IToastService, ToastService>();
 
-        // ViewModels (Singleton for shell, Transient for pages)
+        // ViewModels (Singleton for shell and dashboard, Transient for other pages)
         services.AddSingleton<MainViewModel>();
         services.AddTransient<LoginViewModel>();
+        services.AddSingleton<DashboardViewModel>(); // Singleton to preserve state across navigation
         services.AddTransient<MonthlyCalendarViewModel>();
+        services.AddTransient<YearlyCalendarViewModel>();
         services.AddTransient<SettingsViewModel>();
 
         // Pages (Transient)
         services.AddTransient<LoginPage>();
+        services.AddTransient<DashboardPage>();
         services.AddTransient<MonthlyCalendarPage>();
+        services.AddTransient<YearlyCalendarPage>();
         services.AddTransient<SettingsPage>();
 
         // Main Window (Singleton)

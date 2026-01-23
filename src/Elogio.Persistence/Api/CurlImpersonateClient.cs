@@ -1,7 +1,9 @@
 using System.Diagnostics;
+using System.Net.Http.Json;
 using System.Text;
 using System.Text.Json;
 using System.Text.Json.Serialization;
+using Serilog;
 
 namespace Elogio.Persistence.Api;
 
@@ -9,15 +11,24 @@ namespace Elogio.Persistence.Api;
 /// HTTP client that uses curl_cffi for TLS fingerprint impersonation.
 /// This bypasses server-side TLS fingerprint detection (JA3/JA4).
 ///
-/// Supports two modes:
-/// 1. Standalone mode (default): Uses bundled curl_proxy.exe - no Python required
-/// 2. Python mode: Falls back to Python script if .exe not found
+/// Supports three modes:
+/// 1. Server mode (default when available): Persistent curl_proxy server for TLS reuse
+/// 2. Standalone mode: Uses bundled curl_proxy.exe per request - no Python required
+/// 3. Python mode: Falls back to Python script if .exe not found
 /// </summary>
 public sealed class CurlImpersonateClient : IDisposable
 {
     private readonly string _executablePath;
     private readonly string _impersonate;
     private readonly bool _useStandaloneExe;
+
+    // Server mode fields
+    private Process? _serverProcess;
+    private HttpClient? _httpClient;
+    private readonly int _serverPort = 5123;
+    private bool _serverModeEnabled;
+    private bool _serverModeAvailable;
+    private bool _disposed;
 
     /// <summary>
     /// Creates a new CurlImpersonateClient.
@@ -91,6 +102,168 @@ public sealed class CurlImpersonateClient : IDisposable
     public string ExecutablePath => _executablePath;
 
     /// <summary>
+    /// Returns true if server mode is enabled and running.
+    /// </summary>
+    public bool IsServerModeEnabled => _serverModeEnabled && _serverProcess is { HasExited: false };
+
+    /// <summary>
+    /// Returns the server port (for diagnostics).
+    /// </summary>
+    public int ServerPort => _serverPort;
+
+    /// <summary>
+    /// Initialize the client, optionally starting server mode for better performance.
+    /// Server mode keeps curl_proxy running as an HTTP server, enabling TLS session reuse.
+    /// </summary>
+    /// <param name="enableServerMode">True to enable server mode (recommended for multiple requests)</param>
+    public async Task InitializeAsync(bool enableServerMode = true)
+    {
+        if (_disposed) throw new ObjectDisposedException(nameof(CurlImpersonateClient));
+
+        // Only standalone exe supports server mode currently
+        if (!enableServerMode || !_useStandaloneExe)
+        {
+            _serverModeEnabled = false;
+            Log.Information("CurlImpersonateClient: Server mode disabled (enableServerMode={Enable}, useStandaloneExe={UseExe})",
+                enableServerMode, _useStandaloneExe);
+            return;
+        }
+
+        try
+        {
+            await StartServerAsync();
+            _serverModeEnabled = true;
+            Log.Information("CurlImpersonateClient: Server mode enabled on port {Port}", _serverPort);
+        }
+        catch (Exception ex)
+        {
+            Log.Warning(ex, "CurlImpersonateClient: Failed to start server mode, falling back to process-per-request");
+            _serverModeEnabled = false;
+        }
+    }
+
+    private async Task StartServerAsync()
+    {
+        var sw = Stopwatch.StartNew();
+
+        _serverProcess = new Process
+        {
+            StartInfo = new ProcessStartInfo
+            {
+                FileName = _executablePath,
+                Arguments = $"--server --port {_serverPort}",
+                UseShellExecute = false,
+                RedirectStandardOutput = true,
+                RedirectStandardError = true,
+                CreateNoWindow = true,
+                StandardOutputEncoding = Encoding.UTF8,
+                StandardErrorEncoding = Encoding.UTF8
+            }
+        };
+
+        _serverProcess.Start();
+
+        // Wait for "READY" signal from server
+        var ready = false;
+        var timeout = TimeSpan.FromSeconds(10);
+        using var cts = new CancellationTokenSource(timeout);
+
+        try
+        {
+            while (!cts.Token.IsCancellationRequested)
+            {
+                var line = await _serverProcess.StandardOutput.ReadLineAsync(cts.Token);
+                if (line == "READY")
+                {
+                    ready = true;
+                    break;
+                }
+                Log.Debug("CurlProxy server: {Line}", line);
+            }
+        }
+        catch (OperationCanceledException)
+        {
+            // Timeout
+        }
+
+        if (!ready)
+        {
+            _serverProcess.Kill();
+            _serverProcess.Dispose();
+            _serverProcess = null;
+            throw new InvalidOperationException("curl_proxy server did not become ready within timeout");
+        }
+
+        // Create HTTP client for server communication
+        _httpClient = new HttpClient
+        {
+            BaseAddress = new Uri($"http://localhost:{_serverPort}"),
+            Timeout = TimeSpan.FromSeconds(60)
+        };
+
+        // Verify server is responding
+        var healthResponse = await _httpClient.GetAsync("/health");
+        if (!healthResponse.IsSuccessStatusCode)
+        {
+            throw new InvalidOperationException($"curl_proxy server health check failed: {healthResponse.StatusCode}");
+        }
+
+        _serverModeAvailable = true;
+        Log.Information("[PERF] CurlProxy: Server started in {ElapsedMs}ms", sw.ElapsedMilliseconds);
+    }
+
+    private async Task StopServerAsync()
+    {
+        if (_httpClient != null)
+        {
+            try
+            {
+                // Send shutdown request with short timeout
+                using var cts = new CancellationTokenSource(TimeSpan.FromSeconds(1));
+                await _httpClient.PostAsync("/shutdown", null, cts.Token);
+            }
+            catch
+            {
+                // Ignore shutdown errors - we'll force kill if needed
+            }
+            _httpClient.Dispose();
+            _httpClient = null;
+        }
+
+        if (_serverProcess != null)
+        {
+            try
+            {
+                if (!_serverProcess.HasExited)
+                {
+                    // Give a short grace period for clean shutdown
+                    _serverProcess.WaitForExit(500);
+                }
+
+                // Force kill if still running
+                if (!_serverProcess.HasExited)
+                {
+                    Log.Information("CurlImpersonateClient: Force killing curl_proxy process (PID: {Pid})", _serverProcess.Id);
+                    _serverProcess.Kill(entireProcessTree: true);
+                    _serverProcess.WaitForExit(1000);
+                }
+            }
+            catch (Exception ex)
+            {
+                Log.Warning(ex, "CurlImpersonateClient: Error during process cleanup");
+            }
+            finally
+            {
+                _serverProcess.Dispose();
+                _serverProcess = null;
+            }
+        }
+
+        _serverModeAvailable = false;
+        _serverModeEnabled = false;
+    }
+
+    /// <summary>
     /// Send an HTTP request with TLS fingerprint impersonation.
     /// </summary>
     public async Task<CurlResponse> SendAsync(
@@ -101,6 +274,13 @@ public sealed class CurlImpersonateClient : IDisposable
         string? cookies = null,
         CancellationToken cancellationToken = default)
     {
+        // Use server mode if available
+        if (_serverModeEnabled && _serverModeAvailable && _httpClient != null)
+        {
+            return await SendViaServerAsync(method, url, body, null, headers, cookies, cancellationToken);
+        }
+
+        // Fallback to process-per-request
         var args = BuildArguments(method, url, body, headers, cookies);
 
         try
@@ -127,6 +307,73 @@ public sealed class CurlImpersonateClient : IDisposable
                 StatusCode = -1,
                 Body = string.Empty,
                 Error = ex.Message
+            };
+        }
+    }
+
+    private async Task<CurlResponse> SendViaServerAsync(
+        HttpMethod method,
+        string url,
+        string? body,
+        string? bodyBase64,
+        Dictionary<string, string>? headers,
+        string? cookies,
+        CancellationToken cancellationToken)
+    {
+        var sw = Stopwatch.StartNew();
+
+        try
+        {
+            var request = new ServerRequest
+            {
+                Method = method.Method,
+                Url = url,
+                Body = body,
+                BodyBase64 = bodyBase64,
+                Headers = headers,
+                Cookies = cookies,
+                Impersonate = _impersonate
+            };
+
+            var response = await _httpClient!.PostAsJsonAsync("/request", request, cancellationToken);
+            var responseContent = await response.Content.ReadAsStringAsync(cancellationToken);
+
+            // Debug: Log raw response to see what we're getting
+            var headersIdx = responseContent.IndexOf("\"headers\"", StringComparison.Ordinal);
+            if (headersIdx >= 0)
+            {
+                var headersJson = responseContent.Substring(headersIdx, Math.Min(500, responseContent.Length - headersIdx));
+                Log.Information("[DEBUG] CurlProxy raw headers section: {Headers}", headersJson);
+            }
+
+            var result = JsonSerializer.Deserialize<CurlResponseJson>(responseContent, JsonOptions);
+
+            if (result == null)
+            {
+                return new CurlResponse
+                {
+                    StatusCode = -1,
+                    Body = string.Empty,
+                    Error = "Failed to parse server response"
+                };
+            }
+
+            return new CurlResponse
+            {
+                StatusCode = result.StatusCode,
+                Body = result.Body ?? string.Empty,
+                Headers = result.Headers ?? new Dictionary<string, string>(),
+                Error = result.Error
+            };
+        }
+        catch (Exception ex)
+        {
+            Log.Warning(ex, "CurlProxy: Server request failed, may need to restart server");
+            return new CurlResponse
+            {
+                StatusCode = -1,
+                Body = string.Empty,
+                Error = $"Server mode error: {ex.Message}"
             };
         }
     }
@@ -160,6 +407,7 @@ public sealed class CurlImpersonateClient : IDisposable
     /// Send a POST request using a body file (avoids character encoding issues with BWP data).
     /// CRITICAL: BWP-encoded data contains special characters (like 0xA4) that get corrupted
     /// when passed through command line arguments. Using a body file avoids this issue.
+    /// In server mode, uses base64 encoding instead of body file.
     /// </summary>
     public async Task<CurlResponse> PostWithBodyFileAsync(
         string url,
@@ -168,6 +416,15 @@ public sealed class CurlImpersonateClient : IDisposable
         string? cookies = null,
         CancellationToken cancellationToken = default)
     {
+        // Use server mode if available - base64 encoding avoids file I/O and encoding issues
+        if (_serverModeEnabled && _serverModeAvailable && _httpClient != null)
+        {
+            var utf8NoBom = new UTF8Encoding(encoderShouldEmitUTF8Identifier: false);
+            var bodyBase64 = Convert.ToBase64String(utf8NoBom.GetBytes(body));
+            return await SendViaServerAsync(HttpMethod.Post, url, null, bodyBase64, headers, cookies, cancellationToken);
+        }
+
+        // Fallback to process-per-request with body file
         string? bodyFilePath = null;
         try
         {
@@ -304,6 +561,7 @@ public sealed class CurlImpersonateClient : IDisposable
         string arguments,
         CancellationToken cancellationToken)
     {
+        var totalSw = Stopwatch.StartNew();
         string fileName;
         string processArgs;
 
@@ -330,15 +588,25 @@ public sealed class CurlImpersonateClient : IDisposable
         process.StartInfo.StandardOutputEncoding = Encoding.UTF8;
         process.StartInfo.StandardErrorEncoding = Encoding.UTF8;
 
+        var startSw = Stopwatch.StartNew();
         process.Start();
+        var processStartMs = startSw.ElapsedMilliseconds;
 
         var stdoutTask = process.StandardOutput.ReadToEndAsync(cancellationToken);
         var stderrTask = process.StandardError.ReadToEndAsync(cancellationToken);
 
         await process.WaitForExitAsync(cancellationToken);
+        var processExecMs = startSw.ElapsedMilliseconds;
 
         var stdout = await stdoutTask;
         var stderr = await stderrTask;
+
+        totalSw.Stop();
+
+        // Log process overhead separately from total request time
+        Log.Debug("[PERF] CurlProxy: Process start={StartMs}ms, exec={ExecMs}ms, total={TotalMs}ms, mode={Mode}",
+            processStartMs, processExecMs, totalSw.ElapsedMilliseconds,
+            _useStandaloneExe ? "exe" : "python");
 
         return (process.ExitCode, stdout, stderr);
     }
@@ -384,7 +652,69 @@ public sealed class CurlImpersonateClient : IDisposable
 
     public void Dispose()
     {
-        // Nothing to dispose currently
+        if (_disposed) return;
+        _disposed = true;
+
+        // Stop server - use synchronous version for reliable cleanup during app shutdown
+        StopServerSync();
+    }
+
+    /// <summary>
+    /// Synchronous server stop for use during Dispose.
+    /// Ensures the curl_proxy process is terminated even during app shutdown.
+    /// </summary>
+    private void StopServerSync()
+    {
+        // Dispose HTTP client first
+        if (_httpClient != null)
+        {
+            try
+            {
+                // Try graceful shutdown with very short timeout
+                using var cts = new CancellationTokenSource(TimeSpan.FromMilliseconds(500));
+                _httpClient.PostAsync("/shutdown", null, cts.Token).Wait(500);
+            }
+            catch
+            {
+                // Ignore - we'll force kill the process
+            }
+            finally
+            {
+                _httpClient.Dispose();
+                _httpClient = null;
+            }
+        }
+
+        // Force kill the process
+        if (_serverProcess != null)
+        {
+            try
+            {
+                if (!_serverProcess.HasExited)
+                {
+                    Log.Debug("CurlImpersonateClient: Killing curl_proxy process (PID: {Pid})", _serverProcess.Id);
+                    _serverProcess.Kill(entireProcessTree: true);
+                    _serverProcess.WaitForExit(2000);
+
+                    if (!_serverProcess.HasExited)
+                    {
+                        Log.Warning("CurlImpersonateClient: Process did not exit after Kill()");
+                    }
+                }
+            }
+            catch (Exception ex)
+            {
+                Log.Warning(ex, "CurlImpersonateClient: Error killing process during Dispose");
+            }
+            finally
+            {
+                _serverProcess.Dispose();
+                _serverProcess = null;
+            }
+        }
+
+        _serverModeAvailable = false;
+        _serverModeEnabled = false;
     }
 
     private class CurlResponseJson
@@ -400,6 +730,30 @@ public sealed class CurlImpersonateClient : IDisposable
 
         [JsonPropertyName("error")]
         public string? Error { get; set; }
+    }
+
+    private class ServerRequest
+    {
+        [JsonPropertyName("method")]
+        public string Method { get; set; } = "GET";
+
+        [JsonPropertyName("url")]
+        public string? Url { get; set; }
+
+        [JsonPropertyName("body")]
+        public string? Body { get; set; }
+
+        [JsonPropertyName("body_base64")]
+        public string? BodyBase64 { get; set; }
+
+        [JsonPropertyName("headers")]
+        public Dictionary<string, string>? Headers { get; set; }
+
+        [JsonPropertyName("cookies")]
+        public string? Cookies { get; set; }
+
+        [JsonPropertyName("impersonate")]
+        public string Impersonate { get; set; } = "chrome120";
     }
 }
 

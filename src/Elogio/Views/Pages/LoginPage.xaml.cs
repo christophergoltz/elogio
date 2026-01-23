@@ -20,6 +20,15 @@ public partial class LoginPage
         DataContext = _viewModel;
 
         _viewModel.LoginSuccessful += OnViewModelLoginSuccessful;
+
+        // Cleanup event subscription when page is unloaded
+        Unloaded += OnUnloaded;
+    }
+
+    private void OnUnloaded(object sender, System.Windows.RoutedEventArgs e)
+    {
+        Unloaded -= OnUnloaded;
+        _viewModel.LoginSuccessful -= OnViewModelLoginSuccessful;
     }
 
     /// <summary>

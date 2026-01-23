@@ -5,6 +5,7 @@
                  xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
                  xmlns:ui="http://schemas.lepo.co/wpfui/2022/xaml"
                  xmlns:viewModels="clr-namespace:Elogio.ViewModels"
+                 xmlns:views="clr-namespace:Elogio.Views.Pages"
                  mc:Ignorable="d"
                  Title="{Binding Title}"
                  Height="700" Width="1100"
@@ -12,6 +13,19 @@
                  WindowStartupLocation="CenterScreen"
                  ExtendsContentIntoTitleBar="True"
                  WindowBackdropType="Mica" d:DataContext="{d:DesignInstance viewModels:MainViewModel}">
+
+    <ui:FluentWindow.Resources>
+        <!-- Navigation button style with icon and text -->
+        <!-- ReSharper disable once Xaml.StaticResourceNotResolved // Justification: Resource can only be resolved during runtime -->
+        <Style x:Key="NavButtonStyle" TargetType="ui:Button" BasedOn="{StaticResource {x:Type ui:Button}}">
+            <Setter Property="Height" Value="40" />
+            <Setter Property="Margin" Value="8,2" />
+            <Setter Property="Padding" Value="12,8" />
+            <Setter Property="Appearance" Value="Transparent" />
+            <Setter Property="HorizontalAlignment" Value="Stretch" />
+            <Setter Property="HorizontalContentAlignment" Value="Left" />
+        </Style>
+    </ui:FluentWindow.Resources>
 
     <Grid>
         <Grid.RowDefinitions>
@@ -26,7 +40,7 @@
             <ui:TitleBar.Header>
                 <StackPanel Orientation="Horizontal" VerticalAlignment="Center">
                     <Label Content="{Binding Title}" Margin="16,0,0,0" VerticalAlignment="Center"></Label>
-                    
+
                     <!-- Update Status Box -->
                     <Border CornerRadius="4"
                             Padding="8,2"
@@ -53,8 +67,7 @@
         <!-- Main Content Area -->
         <Grid Grid.Row="1">
             <!-- Update Available Banner -->
-            <Border x:Name="UpdateBanner"
-                    Visibility="Collapsed"
+            <Border Visibility="{Binding IsUpdateBannerVisible, Converter={StaticResource BoolToVisibilityConverter}}"
                     Background="{ui:ThemeResource SystemFillColorNeutralBackgroundBrush}"
                     VerticalAlignment="Top"
                     Panel.ZIndex="100"
@@ -74,37 +87,37 @@
                                    VerticalAlignment="Center" />
 
                     <StackPanel Grid.Column="1" VerticalAlignment="Center">
-                        <TextBlock x:Name="UpdateVersionText"
-                                   Text="A new version is available"
+                        <TextBlock Text="{Binding UpdateBannerVersionText}"
                                    FontWeight="SemiBold" />
-                        <TextBlock x:Name="UpdateDetailsText"
-                                   Text="Click 'Install Now' to update and restart"
+                        <TextBlock Text="{Binding UpdateBannerDetailsText}"
                                    FontSize="12"
                                    Foreground="{ui:ThemeResource TextFillColorSecondaryBrush}" />
                     </StackPanel>
 
                     <ui:Button Grid.Column="2"
-                               x:Name="InstallUpdateButton"
                                Content="Install Now"
                                Appearance="Primary"
                                Margin="8,0"
-                               Click="InstallUpdateButton_Click" />
+                               IsEnabled="{Binding IsInstallUpdateEnabled}"
+                               Command="{Binding InstallUpdateCommand}" />
 
                     <ui:Button Grid.Column="3"
                                Content="Later"
                                Appearance="Secondary"
-                               Click="DismissUpdateButton_Click" />
+                               Command="{Binding DismissUpdateBannerCommand}" />
                 </Grid>
             </Border>
 
-            <!-- Main layout with sidebar (hidden during login) -->
-            <Grid x:Name="MainLayout" Visibility="Collapsed">
+            <!-- Main layout with icon sidebar (hidden during login) -->
+            <Grid x:Name="MainLayout"
+                  Visibility="{Binding IsMainLayoutVisible, Converter={StaticResource BoolToVisibilityConverter}}"
+                  Margin="{Binding IsUpdateBannerVisible, Converter={StaticResource BoolToMarginConverter}}">
                 <Grid.ColumnDefinitions>
-                    <ColumnDefinition Width="210" />
+                    <ColumnDefinition Width="200" />
                     <ColumnDefinition Width="*" />
                 </Grid.ColumnDefinitions>
 
-                <!-- Sidebar -->
+                <!-- Sidebar with icons and text -->
                 <Border Grid.Column="0"
                         Background="{ui:ThemeResource ControlFillColorDefaultBrush}"
                         BorderBrush="{ui:ThemeResource ControlStrokeColorDefaultBrush}"
@@ -112,146 +125,121 @@
                     <Grid>
                         <Grid.RowDefinitions>
                             <RowDefinition Height="Auto" />
-                            <RowDefinition Height="Auto" />
                             <RowDefinition Height="*" />
                             <RowDefinition Height="Auto" />
                         </Grid.RowDefinitions>
 
                         <!-- Employee info -->
-                        <StackPanel Grid.Row="0" Margin="12">
-                            <Grid>
-                                <Grid.ColumnDefinitions>
-                                    <ColumnDefinition Width="Auto" />
-                                    <ColumnDefinition Width="*" />
-                                </Grid.ColumnDefinitions>
-                                <ui:SymbolIcon Grid.Column="0" Symbol="Person24" FontSize="32" VerticalAlignment="Top" />
-                                <TextBlock Grid.Column="1"
-                                           x:Name="EmployeeNameText"
-                                           Text="Employee"
+                        <Border Grid.Row="0" Margin="8,16,8,8">
+                            <StackPanel Orientation="Horizontal" Margin="8,0">
+                                <ui:SymbolIcon Symbol="Person24" FontSize="20" VerticalAlignment="Center" />
+                                <TextBlock Text="{Binding EmployeeName}"
                                            VerticalAlignment="Center"
-                                           Margin="10,0,0,0"
-                                           FontSize="16"
+                                           Margin="12,0,0,0"
                                            FontWeight="SemiBold"
-                                           TextWrapping="Wrap" />
-                            </Grid>
-                        </StackPanel>
-
-                        <!-- Today's Balance + Kommen/Gehen Buttons -->
-                        <StackPanel Grid.Row="1" Margin="12,0,12,12">
-                            <!-- Today's Balance -->
-                            <Border Background="{ui:ThemeResource ControlFillColorDefaultBrush}"
-                                    CornerRadius="4"
-                                    Padding="12,8"
-                                    Margin="0,0,0,12">
-                                <Grid>
-                                    <Grid.RowDefinitions>
-                                        <RowDefinition Height="Auto" />
-                                        <RowDefinition Height="Auto" />
-                                    </Grid.RowDefinitions>
-                                    <Grid.ColumnDefinitions>
-                                        <ColumnDefinition Width="*" />
-                                        <ColumnDefinition Width="Auto" />
-                                        <ColumnDefinition Width="*" />
-                                    </Grid.ColumnDefinitions>
-
-                                    <!-- Today label spanning both columns -->
-                                    <TextBlock Grid.Row="0" Grid.ColumnSpan="3"
-                                               Text="Today"
-                                               FontSize="11"
-                                               Foreground="{ui:ThemeResource TextFillColorSecondaryBrush}"
-                                               HorizontalAlignment="Center"
-                                               Margin="0,0,0,6" />
-
-                                    <!-- Time entries (left side) -->
-                                    <StackPanel x:Name="TimeEntriesPanel" Grid.Row="1" Grid.Column="0"
-                                                VerticalAlignment="Center" HorizontalAlignment="Center">
-                                        <!-- Will be populated dynamically -->
-                                    </StackPanel>
-
-                                    <!-- Separator (centered) -->
-                                    <Border Grid.Row="1" Grid.Column="1"
-                                            Width="1"
-                                            Background="{ui:ThemeResource ControlStrokeColorDefaultBrush}"
-                                            Margin="10,0"
-                                            x:Name="TimeEntriesSeparator"
-                                            Visibility="Collapsed" />
-
-                                    <!-- Balance info (right side) -->
-                                    <StackPanel Grid.Row="1" Grid.Column="2" HorizontalAlignment="Center"
-                                                VerticalAlignment="Center">
-                                        <!-- Worked / Expected -->
-                                        <StackPanel Orientation="Horizontal" HorizontalAlignment="Center">
-                                            <TextBlock x:Name="TodayWorkedText"
-                                                       Text="0:00"
-                                                       FontSize="18"
-                                                       FontWeight="SemiBold"
-                                                       Foreground="{ui:ThemeResource TextFillColorPrimaryBrush}" />
-                                            <TextBlock x:Name="TodayExpectedText"
-                                                       Text="/ 7:00"
-                                                       FontSize="12"
-                                                       Margin="4,0,0,0"
-                                                       VerticalAlignment="Bottom"
-                                                       Foreground="{ui:ThemeResource TextFillColorTertiaryBrush}" />
-                                        </StackPanel>
-                                        <!-- Difference -->
-                                        <TextBlock x:Name="TodayDifferenceText"
-                                                   Text="(-7:00)"
-                                                   FontSize="11"
-                                                   HorizontalAlignment="Center"
-                                                   Margin="0,2,0,0"
-                                                   Foreground="{ui:ThemeResource TextFillColorSecondaryBrush}" />
-                                    </StackPanel>
-                                </Grid>
-                            </Border>
-
-                            <ui:Button x:Name="PunchButton"
-                                       Content="STEMPELN"
-                                       Appearance="Secondary"
-                                       HorizontalAlignment="Stretch"
-                                       IsEnabled="False"
-                                       Click="PunchButton_Click">
-                                <ui:Button.Icon>
-                                    <ui:SymbolIcon x:Name="PunchButtonIcon" Symbol="Clock24" />
-                                </ui:Button.Icon>
-                            </ui:Button>
-                        </StackPanel>
+                                           TextTrimming="CharacterEllipsis" />
+                            </StackPanel>
+                        </Border>
 
                         <!-- Navigation -->
-                        <StackPanel Grid.Row="2" Margin="6,0">
-                            <ui:Button Content="Monthly Calendar"
-                                       Appearance="Transparent"
-                                       HorizontalAlignment="Stretch"
-                                       HorizontalContentAlignment="Left"
-                                       Command="{Binding NavigateToCalendarCommand}">
-                                <ui:Button.Icon>
-                                    <ui:SymbolIcon Symbol="CalendarLtr24" />
-                                </ui:Button.Icon>
+                        <StackPanel Grid.Row="1" Margin="0,8,0,0">
+                            <!-- Dashboard -->
+                            <ui:Button Command="{Binding NavigateToDashboardCommand}">
+                                <ui:Button.Style>
+                                    <Style TargetType="ui:Button" BasedOn="{StaticResource NavButtonStyle}">
+                                        <Style.Triggers>
+                                            <DataTrigger Value="True"
+                                                         Binding="{Binding CurrentPageType, Converter={StaticResource PageTypeToIsActiveConverter}, ConverterParameter={x:Type views:DashboardPage}}">
+                                                <Setter Property="Background" Value="{ui:ThemeResource ControlFillColorSecondaryBrush}" />
+                                            </DataTrigger>
+                                        </Style.Triggers>
+                                    </Style>
+                                </ui:Button.Style>
+                                <ui:Button.Content>
+                                    <StackPanel Orientation="Horizontal">
+                                        <ui:SymbolIcon Symbol="Board24" FontSize="18" VerticalAlignment="Center" />
+                                        <TextBlock Text="Dashboard" VerticalAlignment="Center" Margin="12,0,0,0" />
+                                    </StackPanel>
+                                </ui:Button.Content>
+                            </ui:Button>
+
+                            <!-- Monthly Calendar -->
+                            <ui:Button Command="{Binding NavigateToCalendarCommand}">
+                                <ui:Button.Style>
+                                    <Style TargetType="ui:Button" BasedOn="{StaticResource NavButtonStyle}">
+                                        <Style.Triggers>
+                                            <DataTrigger Value="True"
+                                                         Binding="{Binding CurrentPageType, Converter={StaticResource PageTypeToIsActiveConverter}, ConverterParameter={x:Type views:MonthlyCalendarPage}}">
+                                                <Setter Property="Background" Value="{ui:ThemeResource ControlFillColorSecondaryBrush}" />
+                                            </DataTrigger>
+                                        </Style.Triggers>
+                                    </Style>
+                                </ui:Button.Style>
+                                <ui:Button.Content>
+                                    <StackPanel Orientation="Horizontal">
+                                        <ui:SymbolIcon Symbol="CalendarLtr24" FontSize="18" VerticalAlignment="Center" />
+                                        <TextBlock Text="Monatskalender" VerticalAlignment="Center" Margin="12,0,0,0" />
+                                    </StackPanel>
+                                </ui:Button.Content>
+                            </ui:Button>
+
+                            <!-- Yearly Calendar -->
+                            <ui:Button Command="{Binding NavigateToYearlyCalendarCommand}">
+                                <ui:Button.Style>
+                                    <Style TargetType="ui:Button" BasedOn="{StaticResource NavButtonStyle}">
+                                        <Style.Triggers>
+                                            <DataTrigger Value="True"
+                                                         Binding="{Binding CurrentPageType, Converter={StaticResource PageTypeToIsActiveConverter}, ConverterParameter={x:Type views:YearlyCalendarPage}}">
+                                                <Setter Property="Background" Value="{ui:ThemeResource ControlFillColorSecondaryBrush}" />
+                                            </DataTrigger>
+                                        </Style.Triggers>
+                                    </Style>
+                                </ui:Button.Style>
+                                <ui:Button.Content>
+                                    <StackPanel Orientation="Horizontal">
+                                        <ui:SymbolIcon Symbol="CalendarMultiple24" FontSize="18" VerticalAlignment="Center" />
+                                        <TextBlock Text="Jahreskalender" VerticalAlignment="Center" Margin="12,0,0,0" />
+                                    </StackPanel>
+                                </ui:Button.Content>
                             </ui:Button>
                         </StackPanel>
 
-                        <!-- Footer -->
-                        <StackPanel Grid.Row="3" Margin="6,0,6,12">
-                            <ui:Button Content="Settings"
-                                       Appearance="Transparent"
-                                       HorizontalAlignment="Stretch"
-                                       HorizontalContentAlignment="Left"
-                                       Command="{Binding NavigateToSettingsCommand}">
-                                <ui:Button.Icon>
-                                    <ui:SymbolIcon Symbol="Settings24" />
-                                </ui:Button.Icon>
+                        <!-- Footer: Settings + Logout -->
+                        <StackPanel Grid.Row="2" Margin="0,0,0,16">
+                            <!-- Settings -->
+                            <ui:Button Command="{Binding NavigateToSettingsCommand}">
+                                <ui:Button.Style>
+                                    <Style TargetType="ui:Button" BasedOn="{StaticResource NavButtonStyle}">
+                                        <Style.Triggers>
+                                            <DataTrigger Value="True"
+                                                         Binding="{Binding CurrentPageType, Converter={StaticResource PageTypeToIsActiveConverter}, ConverterParameter={x:Type views:SettingsPage}}">
+                                                <Setter Property="Background" Value="{ui:ThemeResource ControlFillColorSecondaryBrush}" />
+                                            </DataTrigger>
+                                        </Style.Triggers>
+                                    </Style>
+                                </ui:Button.Style>
+                                <ui:Button.Content>
+                                    <StackPanel Orientation="Horizontal">
+                                        <ui:SymbolIcon Symbol="Settings24" FontSize="18" VerticalAlignment="Center" />
+                                        <TextBlock Text="Einstellungen" VerticalAlignment="Center" Margin="12,0,0,0" />
+                                    </StackPanel>
+                                </ui:Button.Content>
                             </ui:Button>
 
                             <!-- Separator -->
-                            <Separator Margin="0,8,0,8" />
+                            <Border Height="1"
+                                    Background="{ui:ThemeResource ControlStrokeColorDefaultBrush}"
+                                    Margin="12,8" />
 
-                            <ui:Button Content="Logout"
-                                       Appearance="Transparent"
-                                       HorizontalAlignment="Stretch"
-                                       HorizontalContentAlignment="Left"
-                                       Click="LogoutButton_Click">
-                                <ui:Button.Icon>
-                                    <ui:SymbolIcon Symbol="SignOut24" />
-                                </ui:Button.Icon>
+                            <!-- Logout -->
+                            <ui:Button Style="{StaticResource NavButtonStyle}"
+                                       Command="{Binding LogoutCommand}">
+                                <ui:Button.Content>
+                                    <StackPanel Orientation="Horizontal">
+                                        <ui:SymbolIcon Symbol="SignOut24" FontSize="18" VerticalAlignment="Center" />
+                                        <TextBlock Text="Abmelden" VerticalAlignment="Center" Margin="12,0,0,0" />
+                                    </StackPanel>
+                                </ui:Button.Content>
                             </ui:Button>
                         </StackPanel>
                     </Grid>
@@ -266,10 +254,10 @@
             <!-- Login Frame (shown when not authenticated) -->
             <Frame x:Name="LoginFrame"
                    NavigationUIVisibility="Hidden"
-                   Visibility="Visible" />
+                   Visibility="{Binding IsLoginVisible, Converter={StaticResource BoolToVisibilityConverter}}" />
 
             <!-- Loading Overlay (for auto-login) -->
-            <Grid x:Name="LoadingOverlay" Visibility="Collapsed"
+            <Grid Visibility="{Binding IsLoadingVisible, Converter={StaticResource BoolToVisibilityConverter}}"
                   Background="{ui:ThemeResource ApplicationBackgroundBrush}">
                 <StackPanel VerticalAlignment="Center" HorizontalAlignment="Center">
                     <TextBlock Text="ELOGIO"
@@ -280,7 +268,7 @@
                     <ui:ProgressRing IsIndeterminate="True"
                                      Width="40" Height="40"
                                      Margin="0,24,0,0" />
-                    <TextBlock Text="Connecting..."
+                    <TextBlock Text="{Binding LoadingStatusText}"
                                FontSize="14"
                                HorizontalAlignment="Center"
                                Margin="0,16,0,0"

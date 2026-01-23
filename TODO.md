@@ -7,27 +7,48 @@
 - [ ] Anzeige der abgegoltenen vs. tatsächlichen Überstunden
 - [ ] Restliche anrechenbare Überstunden berechnen
 
-## 2. Abwesenheiten Kollegen
-
-- [ ] API-Endpunkt für Team-/Kollegen-Abwesenheiten identifizieren
-- [ ] Abwesenheiten anderer Mitarbeiter abrufen
-- [ ] Anzeige "Wer ist heute abwesend?"
-- [ ] Anzeige "Wann ist Person X wieder da?"
-
-## 3. Verbesserungen Monatsansicht
+## 2. Verbesserungen Monatsansicht
 
 - [ ] Zeitbereich für "Privat"-Abwesenheiten anzeigen (z.B. "Privat (08:00 - 13:30)")
   - Benötigt ggf. andere API oder Kombination aus Absence + Presence API
-
-## 4. Jahresübersicht
-
-- [ ] Jahresübersicht-View erstellen
-- [ ] Abwesenheiten im Jahreskalender anzeigen
-- [ ] Farbliche Kennzeichnung nach Abwesenheitstyp
 
 ---
 
 ## Offene Fragen
 
-- [ ] Gibt es eine API für Team-Abwesenheiten oder nur für den eigenen User?
 - [ ] Wie werden abgegoltene Überstunden im System konfiguriert?
+
+## Bugs
+
+- [ ] HFT und ÜST -> Haben den gleich gelben Farbcode, somit werden sie im code gleich gehandhabt und dadurch passt die Berechnung nicht mehr
+  - HFT sind Halbe Feiertag und ÜST ist ein Überstundenausgleich
+
+---
+
+## Technical Debt - Clean Code & SOLID (2026-01-22)
+
+### P3 - Niedrige Priorität (Nice-to-have)
+
+- [ ] **Converter durch Styles/Triggers ersetzen (optional)**
+  - `BoolToBackgroundConverter` → DataTrigger für Weekend-Highlighting
+  - `BoolToMarginConverter` → DataTrigger für Update-Banner-Margin
+  - Vorteil: XAML-nativer Ansatz, weniger C#-Code
+  - Nachteil: Trigger können bei komplexer Logik unübersichtlich werden
+  - **Entscheidung:** Abwägen ob Converter-Ansatz beibehalten (konsistent, testbar)
+
+- [ ] **Cache-Logik aus KelioService extrahieren (SRP)**
+  - `MonthDataCache` Klasse für Month-Caching (Dictionary + Prefetch-Logik)
+  - `AbsenceDataCache` Klasse für Absence-Caching (Dictionary + Range-Tracking)
+  - Würde KelioService von 713 auf ~400 Zeilen reduzieren
+  - **Abwägen:** Aktuell kohäsiv, Extraktion nur bei weiterem Wachstum
+
+- [ ] **PunchService/PunchViewModel extrahieren (SRP)**
+  - Punch-Logik aus DashboardViewModel in separaten Service
+  - Ermöglicht Wiederverwendung (z.B. Quick-Punch in TitleBar)
+  - **Abwägen:** Aktuell nur im Dashboard benötigt
+
+### Akzeptierte Technical Debt (dokumentiert, aber bewusst nicht refactored)
+
+- **DashboardViewModel Größe (~525 Zeilen):** Kohäsiv, alle Properties gehören zum Dashboard. Wird bei Feature-Erweiterung überprüft.
+- **KelioService Größe (713 Zeilen):** Cache-Logik ist stark mit Service verbunden. Extraktion nur bei signifikantem Wachstum.
+- **Hardcoded Day Names ("Mo", "Di", etc.):** Deutsche App, Lokalisierung aktuell nicht geplant.

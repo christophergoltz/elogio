@@ -39,7 +39,7 @@ jobs:
 
       - name: Build curl_proxy.exe
         run: |
-          pip install pyinstaller curl_cffi
+          pip install pyinstaller curl_cffi flask
           cd src/Elogio.Persistence/Scripts
           pyinstaller --onefile --clean --name curl_proxy curl_proxy.py
           mkdir -p ../tools
