@@ -108,13 +108,30 @@ public partial class App
     protected override void OnExit(ExitEventArgs e)
     {
         Log.Information("Elogio shutting down");
-        Log.CloseAndFlush();
 
+        // Dispose services with a timeout to prevent hanging on shutdown
         if (_serviceProvider is IDisposable disposable)
         {
-            disposable.Dispose();
+            var disposeTask = Task.Run(() =>
+            {
+                try
+                {
+                    disposable.Dispose();
+                }
+                catch (Exception ex)
+                {
+                    Log.Warning(ex, "Error during service provider dispose");
+                }
+            });
+
+            // Wait max 5 seconds for cleanup, then force exit
+            if (!disposeTask.Wait(TimeSpan.FromSeconds(5)))
+            {
+                Log.Warning("Service provider dispose timed out after 5 seconds - forcing exit");
+            }
         }
 
+        Log.CloseAndFlush();
         base.OnExit(e);
     }
 

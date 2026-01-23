@@ -12,7 +12,7 @@ using Serilog;
 
 namespace Elogio.ViewModels;
 
-public partial class DashboardViewModel : ObservableObject
+public partial class DashboardViewModel : ObservableObject, IDisposable
 {
     private readonly IKelioService _kelioService;
     private readonly IToastService _toastService;
@@ -20,6 +20,7 @@ public partial class DashboardViewModel : ObservableObject
 
     // Track whether initial data has been loaded (for Singleton pattern)
     private bool _dataLoaded;
+    private bool _disposed;
 
     #region Week Overview Properties
 
@@ -679,6 +680,19 @@ public partial class DashboardViewModel : ObservableObject
     private void ShowToast(string title, string message, ToastType type)
     {
         _toastService.ShowToast(title, message, type);
+    }
+
+    #endregion
+
+    #region IDisposable
+
+    public void Dispose()
+    {
+        if (_disposed) return;
+        _disposed = true;
+
+        // Unsubscribe from events to prevent memory leaks
+        _punchService.StateChanged -= OnPunchStateChanged;
     }
 
     #endregion

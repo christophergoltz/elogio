@@ -7,23 +7,10 @@
 - [ ] Anzeige der abgegoltenen vs. tatsächlichen Überstunden
 - [ ] Restliche anrechenbare Überstunden berechnen
 
-## 2. Abwesenheiten Kollegen
-
-- [ ] API-Endpunkt für Team-/Kollegen-Abwesenheiten identifizieren
-- [ ] Abwesenheiten anderer Mitarbeiter abrufen
-- [ ] Anzeige "Wer ist heute abwesend?"
-- [ ] Anzeige "Wann ist Person X wieder da?"
-
-## 3. Verbesserungen Monatsansicht
+## 2. Verbesserungen Monatsansicht
 
 - [ ] Zeitbereich für "Privat"-Abwesenheiten anzeigen (z.B. "Privat (08:00 - 13:30)")
   - Benötigt ggf. andere API oder Kombination aus Absence + Presence API
-
-## 4. Jahresübersicht
-
-- [ ] Jahresübersicht-View erstellen
-- [ ] Abwesenheiten im Jahreskalender anzeigen
-- [ ] Farbliche Kennzeichnung nach Abwesenheitstyp
 
 ---
 
@@ -41,27 +28,6 @@
 ---
 
 ## Technical Debt - Clean Code & SOLID (2026-01-22)
-
-### P1 - Hohe Priorität (vor Production Release)
-
-- [x] **Mehrere Klassen pro Datei auftrennen**
-  - `MainViewModel.cs`: `UpdateCheckStatus`, `TimeEntryDisplayItem`, `ToastNotificationEventArgs`, `ToastType` → eigene Dateien
-  - `DashboardViewModel.cs`: `DayOverviewItem`, `DayOverviewState`, `AbsentColleagueItem` → eigene Dateien
-  - `MonthlyCalendarViewModel.cs`: `DayCellViewModel`, `DayCellState` → eigene Dateien
-  - `YearlyCalendarViewModel.cs`: `YearlyDayItem`, `MonthAbsenceCard` → eigene Dateien
-  - Alle Models nun in `ViewModels/Models/` (10 Dateien)
-
-### P2 - Mittlere Priorität (Code Quality)
-
-- [x] **TimeSpanFormatter Utility-Klasse erstellen**
-  - Duplicate Code in `DayOverviewItem.FormatTime()` und `DashboardViewModel.FormatTimeSpan()`
-  - Zentrale `TimeSpanFormatter` Klasse mit Methoden: `Format()`, `FormatWithSign()`
-  - Ort: `Elogio/Utilities/TimeSpanFormatter.cs`
-
-- [x] **Magic Colors als Konstanten definieren**
-  - Betroffene Dateien: `MainViewModel.cs`, `DashboardViewModel.cs`, `DayOverviewItem.cs`
-  - Konstanten-Klasse: `Elogio/Resources/AppColors.cs`
-  - Farben: SuccessGreen, ErrorRed, WarningOrange, InfoBlue, NeutralGray
 
 ### P3 - Niedrige Priorität (Nice-to-have)
 
@@ -88,11 +54,3 @@
 - **DashboardViewModel Größe (~525 Zeilen):** Kohäsiv, alle Properties gehören zum Dashboard. Wird bei Feature-Erweiterung überprüft.
 - **KelioService Größe (713 Zeilen):** Cache-Logik ist stark mit Service verbunden. Extraktion nur bei signifikantem Wachstum.
 - **Hardcoded Day Names ("Mo", "Di", etc.):** Deutsche App, Lokalisierung aktuell nicht geplant.
-
-### Abgeschlossene Refactorings
-
-- [x] BoolConverters.cs → Aufgetrennt in BoolConverters.cs, BrushConverters.cs, NavigationConverters.cs, NumericConverters.cs
-- [x] KelioClient.cs (1617 → 535 Zeilen) → Extrahiert: KelioAuthenticator, CalendarAppInitializer, SessionContext, EmployeeIdExtractor, TranslationLoader
-- [x] ViewModels Model-Klassen → 10 Dateien in ViewModels/Models/ extrahiert (2026-01-22)
-- [x] TimeSpanFormatter Utility → Zentrale Zeitformatierung, ersetzt 6+ duplicate Methoden
-- [x] AppColors → Zentrale Farbkonstanten für konsistentes UI-Styling

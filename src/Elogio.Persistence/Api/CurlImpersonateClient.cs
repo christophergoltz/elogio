@@ -218,11 +218,13 @@ public sealed class CurlImpersonateClient : IDisposable
         {
             try
             {
-                await _httpClient.PostAsync("/shutdown", null);
+                // Send shutdown request with short timeout
+                using var cts = new CancellationTokenSource(TimeSpan.FromSeconds(1));
+                await _httpClient.PostAsync("/shutdown", null, cts.Token);
             }
             catch
             {
-                // Ignore shutdown errors
+                // Ignore shutdown errors - we'll force kill if needed
             }
             _httpClient.Dispose();
             _httpClient = null;
@@ -234,19 +236,27 @@ public sealed class CurlImpersonateClient : IDisposable
             {
                 if (!_serverProcess.HasExited)
                 {
+                    // Give a short grace period for clean shutdown
+                    _serverProcess.WaitForExit(500);
+                }
+
+                // Force kill if still running
+                if (!_serverProcess.HasExited)
+                {
+                    Log.Information("CurlImpersonateClient: Force killing curl_proxy process (PID: {Pid})", _serverProcess.Id);
+                    _serverProcess.Kill(entireProcessTree: true);
                     _serverProcess.WaitForExit(1000);
-                    if (!_serverProcess.HasExited)
-                    {
-                        _serverProcess.Kill();
-                    }
                 }
             }
-            catch
+            catch (Exception ex)
             {
-                // Ignore cleanup errors
+                Log.Warning(ex, "CurlImpersonateClient: Error during process cleanup");
             }
-            _serverProcess.Dispose();
-            _serverProcess = null;
+            finally
+            {
+                _serverProcess.Dispose();
+                _serverProcess = null;
+            }
         }
 
         _serverModeAvailable = false;
@@ -645,15 +655,66 @@ public sealed class CurlImpersonateClient : IDisposable
         if (_disposed) return;
         _disposed = true;
 
-        // Stop server asynchronously but don't wait too long
-        try
+        // Stop server - use synchronous version for reliable cleanup during app shutdown
+        StopServerSync();
+    }
+
+    /// <summary>
+    /// Synchronous server stop for use during Dispose.
+    /// Ensures the curl_proxy process is terminated even during app shutdown.
+    /// </summary>
+    private void StopServerSync()
+    {
+        // Dispose HTTP client first
+        if (_httpClient != null)
         {
-            StopServerAsync().Wait(TimeSpan.FromSeconds(2));
+            try
+            {
+                // Try graceful shutdown with very short timeout
+                using var cts = new CancellationTokenSource(TimeSpan.FromMilliseconds(500));
+                _httpClient.PostAsync("/shutdown", null, cts.Token).Wait(500);
+            }
+            catch
+            {
+                // Ignore - we'll force kill the process
+            }
+            finally
+            {
+                _httpClient.Dispose();
+                _httpClient = null;
+            }
         }
-        catch
+
+        // Force kill the process
+        if (_serverProcess != null)
         {
-            // Ignore cleanup errors
+            try
+            {
+                if (!_serverProcess.HasExited)
+                {
+                    Log.Debug("CurlImpersonateClient: Killing curl_proxy process (PID: {Pid})", _serverProcess.Id);
+                    _serverProcess.Kill(entireProcessTree: true);
+                    _serverProcess.WaitForExit(2000);
+
+                    if (!_serverProcess.HasExited)
+                    {
+                        Log.Warning("CurlImpersonateClient: Process did not exit after Kill()");
+                    }
+                }
+            }
+            catch (Exception ex)
+            {
+                Log.Warning(ex, "CurlImpersonateClient: Error killing process during Dispose");
+            }
+            finally
+            {
+                _serverProcess.Dispose();
+                _serverProcess = null;
+            }
         }
+
+        _serverModeAvailable = false;
+        _serverModeEnabled = false;
     }
 
     private class CurlResponseJson

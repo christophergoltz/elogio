@@ -28,6 +28,10 @@ public class KelioService : IKelioService, IDisposable
     private readonly MonthDataCache _monthCache = new();
     private readonly AbsenceDataCache _absenceCache = new();
 
+    // Cancellation token source for background tasks - cancelled on Dispose
+    private CancellationTokenSource? _backgroundTasksCts;
+    private bool _disposed;
+
     public bool IsAuthenticated => _client?.SessionId != null;
     public string? EmployeeName => _client?.EmployeeName ?? _employeeName;
     public int? EmployeeId => _client?.EmployeeId;
@@ -134,19 +138,25 @@ public class KelioService : IKelioService, IDisposable
         if (!_monthCache.Contains(prevYear, prevMonth))
         {
             Log.Information("Prefetching previous month {Year}-{Month}", prevYear, prevMonth);
+            var token = _backgroundTasksCts?.Token ?? CancellationToken.None;
             _ = Task.Run(async () =>
             {
                 try
                 {
+                    token.ThrowIfCancellationRequested();
                     var data = await FetchMonthDataInternalAsync(prevYear, prevMonth);
                     _monthCache.Set(prevYear, prevMonth, data);
                     Log.Information("Prefetch complete for {Year}-{Month}", prevYear, prevMonth);
+                }
+                catch (OperationCanceledException)
+                {
+                    Log.Debug("Prefetch cancelled for {Year}-{Month}", prevYear, prevMonth);
                 }
                 catch (Exception ex)
                 {
                     Log.Warning(ex, "Prefetch failed for {Year}-{Month}", prevYear, prevMonth);
                 }
-            });
+            }, token);
         }
     }
 
@@ -159,6 +169,11 @@ public class KelioService : IKelioService, IDisposable
 
     public void Logout()
     {
+        // Cancel any running background tasks
+        _backgroundTasksCts?.Cancel();
+        _backgroundTasksCts?.Dispose();
+        _backgroundTasksCts = null;
+
         _client?.Dispose();
         _client = null;
         _employeeName = null;
@@ -253,10 +268,12 @@ public class KelioService : IKelioService, IDisposable
         if (!_absenceCache.Contains(prevYear, prevMonth))
         {
             Log.Information("Prefetching absences for previous month {Year}-{Month}", prevYear, prevMonth);
+            var token = _backgroundTasksCts?.Token ?? CancellationToken.None;
             _ = Task.Run(async () =>
             {
                 try
                 {
+                    token.ThrowIfCancellationRequested();
                     // Use same extended date range logic as GetMonthAbsencesAsync
                     var (startDate, endDate) = GetAbsenceDateRange(prevYear, prevMonth);
 
@@ -267,11 +284,15 @@ public class KelioService : IKelioService, IDisposable
                         Log.Information("Absence prefetch complete for {Year}-{Month}", prevYear, prevMonth);
                     }
                 }
+                catch (OperationCanceledException)
+                {
+                    Log.Debug("Absence prefetch cancelled for {Year}-{Month}", prevYear, prevMonth);
+                }
                 catch (Exception ex)
                 {
                     Log.Warning(ex, "Absence prefetch failed for {Year}-{Month}", prevYear, prevMonth);
                 }
-            });
+            }, token);
         }
     }
 
@@ -542,11 +563,13 @@ public class KelioService : IKelioService, IDisposable
         if (!_absenceCache.TryStartPrefetch(startDate, endDate, isBackward))
             return;
 
+        var token = _backgroundTasksCts?.Token ?? CancellationToken.None;
         _ = Task.Run(async () =>
         {
             var sw = Stopwatch.StartNew();
             try
             {
+                token.ThrowIfCancellationRequested();
                 Log.Information("PrefetchAbsenceRangeAsync: Starting prefetch for {Start} to {End}", startDate, endDate);
 
                 var data = await _client!.GetAbsencesAsync(startDate, endDate);
@@ -559,6 +582,7 @@ public class KelioService : IKelioService, IDisposable
 
                     while (currentMonth <= endMonth)
                     {
+                        token.ThrowIfCancellationRequested();
                         var monthStart = currentMonth;
                         var monthEnd = monthStart.AddMonths(1).AddDays(-1);
 
@@ -587,6 +611,11 @@ public class KelioService : IKelioService, IDisposable
                         sw.ElapsedMilliseconds, _absenceCache.Count);
                 }
             }
+            catch (OperationCanceledException)
+            {
+                Log.Debug("PrefetchAbsenceRangeAsync: Cancelled for {Start} to {End}", startDate, endDate);
+                _absenceCache.RevertPrefetch(PrefetchMonths, isBackward);
+            }
             catch (Exception ex)
             {
                 Log.Warning(ex, "PrefetchAbsenceRangeAsync: Failed to prefetch {Start} to {End}", startDate, endDate);
@@ -594,7 +623,7 @@ public class KelioService : IKelioService, IDisposable
                 // Revert the range update on failure
                 _absenceCache.RevertPrefetch(PrefetchMonths, isBackward);
             }
-        });
+        }, token);
     }
 
     /// <summary>
@@ -611,20 +640,31 @@ public class KelioService : IKelioService, IDisposable
 
         Log.Information("[PERF] StartPostLoginPrefetch: Starting background data prefetch");
 
+        // Create/reset cancellation token source for background tasks
+        _backgroundTasksCts?.Cancel();
+        _backgroundTasksCts?.Dispose();
+        _backgroundTasksCts = new CancellationTokenSource();
+        var token = _backgroundTasksCts.Token;
+
         // Fire-and-forget: Initialize absence cache in background
         _ = Task.Run(async () =>
         {
             try
             {
+                token.ThrowIfCancellationRequested();
                 var sw = Stopwatch.StartNew();
                 await InitializeAbsenceCacheAsync();
                 Log.Information("[PERF] StartPostLoginPrefetch: Absence cache initialized in {ElapsedMs}ms", sw.ElapsedMilliseconds);
+            }
+            catch (OperationCanceledException)
+            {
+                Log.Debug("StartPostLoginPrefetch: Absence cache prefetch cancelled");
             }
             catch (Exception ex)
             {
                 Log.Warning(ex, "StartPostLoginPrefetch: Failed to initialize absence cache");
             }
-        });
+        }, token);
 
         // Fire-and-forget: Prefetch current month calendar data
         var today = DateOnly.FromDateTime(DateTime.Today);
@@ -632,19 +672,36 @@ public class KelioService : IKelioService, IDisposable
         {
             try
             {
+                token.ThrowIfCancellationRequested();
                 var sw = Stopwatch.StartNew();
                 await GetMonthDataAsync(today.Year, today.Month);
                 Log.Information("[PERF] StartPostLoginPrefetch: Current month data loaded in {ElapsedMs}ms", sw.ElapsedMilliseconds);
+            }
+            catch (OperationCanceledException)
+            {
+                Log.Debug("StartPostLoginPrefetch: Month data prefetch cancelled");
             }
             catch (Exception ex)
             {
                 Log.Warning(ex, "StartPostLoginPrefetch: Failed to prefetch current month data");
             }
-        });
+        }, token);
     }
 
     public void Dispose()
     {
+        if (_disposed) return;
+        _disposed = true;
+
+        // Cancel all background tasks first
+        if (_backgroundTasksCts != null)
+        {
+            Log.Debug("KelioService: Cancelling background tasks");
+            _backgroundTasksCts.Cancel();
+            _backgroundTasksCts.Dispose();
+            _backgroundTasksCts = null;
+        }
+
         _client?.Dispose();
         _client = null;
         GC.SuppressFinalize(this);

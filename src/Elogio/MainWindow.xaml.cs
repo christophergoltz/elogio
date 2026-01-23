@@ -19,6 +19,7 @@ public partial class MainWindow
     private readonly IKelioService _kelioService;
     private readonly IToastService _toastService;
     private readonly Snackbar _snackbar;
+    private LoginPage? _currentLoginPage;
 
     public MainWindow(
         MainViewModel viewModel,
@@ -113,16 +114,28 @@ public partial class MainWindow
     {
         _viewModel.NavigateToLogin();
 
+        // Cleanup previous login page subscription
+        CleanupLoginPage();
+
         // Create and navigate to login page
-        var loginPage = App.Services.GetRequiredService<LoginPage>();
-        loginPage.LoginSuccessful += OnLoginSuccessful;
+        _currentLoginPage = App.Services.GetRequiredService<LoginPage>();
+        _currentLoginPage.LoginSuccessful += OnLoginSuccessful;
 
         if (prefillSettings != null)
         {
-            loginPage.PrefillCredentials(prefillSettings, showError);
+            _currentLoginPage.PrefillCredentials(prefillSettings, showError);
         }
 
-        LoginFrame.Navigate(loginPage);
+        LoginFrame.Navigate(_currentLoginPage);
+    }
+
+    private void CleanupLoginPage()
+    {
+        if (_currentLoginPage != null)
+        {
+            _currentLoginPage.LoginSuccessful -= OnLoginSuccessful;
+            _currentLoginPage = null;
+        }
     }
 
     /// <summary>
@@ -135,6 +148,8 @@ public partial class MainWindow
 
     private void OnLoginSuccessful(object? sender, EventArgs e)
     {
+        // Cleanup login page subscription after successful login
+        CleanupLoginPage();
         NavigateToMain();
     }
 
@@ -142,6 +157,7 @@ public partial class MainWindow
     {
         _viewModel.ToastRequested -= OnToastRequested;
         _toastService.ToastRequested -= OnToastRequested;
+        CleanupLoginPage();
         _viewModel.Dispose();
 
         if (_kelioService is IDisposable disposable)
