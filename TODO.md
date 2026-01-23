@@ -16,12 +16,10 @@
 
 ## Offene Fragen
 
-- [ ] Gibt es eine API für Team-Abwesenheiten oder nur für den eigenen User?
 - [ ] Wie werden abgegoltene Überstunden im System konfiguriert?
 
 ## Bugs
 
-- [ ] Monatskalender, für die einzelnen Tage fehlen die Border
 - [ ] HFT und ÜST -> Haben den gleich gelben Farbcode, somit werden sie im code gleich gehandhabt und dadurch passt die Berechnung nicht mehr
   - HFT sind Halbe Feiertag und ÜST ist ein Überstundenausgleich
 
