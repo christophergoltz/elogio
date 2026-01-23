@@ -217,6 +217,31 @@ public class KelioService : IKelioService, IDisposable
         }
     }
 
+    public async Task<List<ColleagueAbsenceDto>> GetColleagueAbsencesAsync(int year, int month)
+    {
+        if (_client == null || !IsAuthenticated)
+        {
+            Log.Warning("GetColleagueAbsencesAsync: Client not authenticated");
+            return [];
+        }
+
+        try
+        {
+            Log.Information("GetColleagueAbsencesAsync: Fetching colleague absences for {Year}-{Month:D2}", year, month);
+
+            var data = await _client.GetColleagueAbsencesAsync(year, month);
+
+            Log.Information("GetColleagueAbsencesAsync: Got {ColleagueCount} colleagues", data.Count);
+
+            return data;
+        }
+        catch (Exception ex)
+        {
+            Log.Error(ex, "GetColleagueAbsencesAsync: Failed to fetch colleague absences for {Year}-{Month}", year, month);
+            return [];
+        }
+    }
+
     public void PrefetchAdjacentMonthAbsences(int year, int month)
     {
         if (_client == null || !IsAuthenticated)

@@ -34,6 +34,7 @@ public class KelioClient : IDisposable
     private readonly SemainePresenceParser _presenceParser = new();
     private readonly BadgerSignalerResponseParser _punchParser = new();
     private readonly AbsenceCalendarParser _absenceParser = new();
+    private readonly ColleagueAbsenceParser _colleagueAbsenceParser = new();
     private readonly BwpCodec _bwpCodec = new();
     private readonly TranslationLoader _translationLoader;
     private readonly KelioAuthenticator _authenticator;
@@ -317,6 +318,133 @@ public class KelioClient : IDisposable
         var startDate = new DateOnly(today.Year, 1, 1);
         var endDate = new DateOnly(today.Year, 12, 31);
         return GetAbsencesAsync(startDate, endDate);
+    }
+
+    /// <summary>
+    /// Get colleague absence data from the group calendar.
+    /// This uses a different endpoint than personal absences - it fetches an HTML page
+    /// with embedded GWT-RPC data showing all colleagues' absences.
+    /// </summary>
+    /// <param name="year">The year</param>
+    /// <param name="month">The month (1-12)</param>
+    /// <returns>List of colleague absences, or empty list if failed</returns>
+    public async Task<List<ColleagueAbsenceDto>> GetColleagueAbsencesAsync(int year, int month)
+    {
+        if (!_session.IsAuthenticated || string.IsNullOrEmpty(_session.SessionId))
+        {
+            throw new InvalidOperationException("Not authenticated. Call LoginAsync first.");
+        }
+
+        await LogDebugAsync($"GetColleagueAbsences: Fetching for {year}-{month:D2}");
+
+        // The group calendar page uses 0-indexed months (JavaScript convention)
+        var jsMonth = month - 1;
+
+        // Build form data for the POST request
+        var formData = new Dictionary<string, string>
+        {
+            ["ACTION"] = "AFFICHER_CALENDRIER_ABSENCES_SERVICE_",
+            ["annee"] = year.ToString(),
+            ["mois"] = jsMonth.ToString()
+        };
+
+        var url = $"{_baseUrl}{GwtEndpoints.ColleagueAbsencePage}";
+        var cookies = GetCookiesString();
+
+        // Build headers for form POST
+        var headers = new Dictionary<string, string>
+        {
+            ["Content-Type"] = "application/x-www-form-urlencoded",
+            ["User-Agent"] = BrowserUserAgent,
+            ["Accept"] = "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8",
+            ["Accept-Language"] = "de-DE,de;q=0.9,en;q=0.8",
+            ["Referer"] = $"{_baseUrl}{GwtEndpoints.ColleagueAbsencePage}",
+            ["X-Requested-With"] = "XMLHttpRequest"
+        };
+
+        await LogDebugAsync($"GetColleagueAbsences: POST to {url}");
+
+        // Build URL-encoded form body
+        var formBody = string.Join("&", formData.Select(kvp =>
+            $"{Uri.EscapeDataString(kvp.Key)}={Uri.EscapeDataString(kvp.Value)}"));
+
+        CurlResponse response;
+        if (UseCurlImpersonate)
+        {
+            response = await _curlClient.PostAsync(url, formBody, headers, cookies);
+        }
+        else
+        {
+            // Fallback to standard HttpClient
+            using var content = new FormUrlEncodedContent(formData);
+            var httpResponse = await _httpClient.PostAsync(GwtEndpoints.ColleagueAbsencePage, content);
+            response = new CurlResponse
+            {
+                StatusCode = (int)httpResponse.StatusCode,
+                Body = await httpResponse.Content.ReadAsStringAsync()
+            };
+        }
+
+        await LogDebugAsync($"GetColleagueAbsences: Response status {response.StatusCode}, body length {response.Body.Length}");
+
+        if (!response.IsSuccessStatusCode)
+        {
+            await LogDebugAsync($"GetColleagueAbsences: Failed with status {response.StatusCode}");
+            return [];
+        }
+
+        // Extract the bwpContent div from the HTML response
+        var gwtData = ExtractBwpContent(response.Body);
+        if (string.IsNullOrEmpty(gwtData))
+        {
+            await LogDebugAsync("GetColleagueAbsences: No bwpContent found in response");
+            return [];
+        }
+
+        await LogDebugAsync($"GetColleagueAbsences: Extracted GWT data, length {gwtData.Length}");
+        await LogDebugAsync($"GetColleagueAbsences: GWT data (first 200 chars): {gwtData[..Math.Min(200, gwtData.Length)]}");
+
+        // Save GWT data to temp file for debugging
+        var debugPath = Path.Combine(Path.GetTempPath(), $"colleague_absences_{year}_{month:D2}.txt");
+        await File.WriteAllTextAsync(debugPath, gwtData);
+        await LogDebugAsync($"GetColleagueAbsences: Saved GWT data to {debugPath}");
+
+        // Parse the GWT data
+        var result = _colleagueAbsenceParser.Parse(gwtData, month, year);
+
+        await LogDebugAsync($"GetColleagueAbsences: Parsed {result.Count} colleagues:");
+        foreach (var colleague in result)
+        {
+            var absentToday = colleague.IsAbsentToday ? " [ABSENT TODAY]" : "";
+            await LogDebugAsync($"  - {colleague.Name}: Days [{string.Join(",", colleague.AbsenceDays)}]{absentToday}");
+        }
+
+        return result;
+    }
+
+    /// <summary>
+    /// Extract GWT-RPC data from the bwpContent div in an HTML response.
+    /// </summary>
+    private static string? ExtractBwpContent(string html)
+    {
+        // Pattern: <div id="bwpContent" style="display:none;">...data...</div>
+        const string startMarker = "id=\"bwpContent\"";
+        var startIdx = html.IndexOf(startMarker, StringComparison.OrdinalIgnoreCase);
+        if (startIdx < 0)
+            return null;
+
+        // Find the closing > of the div tag
+        var contentStart = html.IndexOf('>', startIdx + startMarker.Length);
+        if (contentStart < 0)
+            return null;
+        contentStart++; // Skip the >
+
+        // Find the closing </div>
+        var contentEnd = html.IndexOf("</div>", contentStart, StringComparison.OrdinalIgnoreCase);
+        if (contentEnd < 0)
+            return null;
+
+        return html[contentStart..contentEnd].Trim();
     }
 
     /// <summary>

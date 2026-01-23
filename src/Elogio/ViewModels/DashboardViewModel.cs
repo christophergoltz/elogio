@@ -140,16 +140,12 @@ public partial class DashboardViewModel : ObservableObject
     }
 
     /// <summary>
-    /// Initialize placeholder data for absent colleagues.
+    /// Initialize colleague data as empty (will be loaded asynchronously).
     /// </summary>
     private void InitializePlaceholderData()
     {
-        AbsentColleagues =
-        [
-            new AbsentColleagueItem { Name = "Max Mustermann", AbsenceInfo = "Urlaub", ReturnDate = "Zurück am 27.01." },
-            new AbsentColleagueItem { Name = "Erika Musterfrau", AbsenceInfo = "Krank", ReturnDate = "Unbekannt" }
-        ];
-        HasAbsentColleagues = AbsentColleagues.Count > 0;
+        AbsentColleagues = [];
+        HasAbsentColleagues = false;
     }
 
     /// <summary>
@@ -189,6 +185,9 @@ public partial class DashboardViewModel : ObservableObject
                     UpdateTodayBalance(weekData, today);
                 });
             }
+
+            // Also refresh colleague absences
+            await LoadColleagueAbsencesAsync(today);
         }
         catch (Exception ex)
         {
@@ -207,7 +206,7 @@ public partial class DashboardViewModel : ObservableObject
     }
 
     /// <summary>
-    /// Load all dashboard data (week overview, today's balance, punch state).
+    /// Load all dashboard data (week overview, today's balance, punch state, colleague absences).
     /// </summary>
     private async Task LoadDashboardDataAsync()
     {
@@ -224,6 +223,9 @@ public partial class DashboardViewModel : ObservableObject
                 BuildWeekOverview(weekData);
                 UpdateTodayBalance(weekData, today);
             }
+
+            // Load colleague absences (fire-and-forget, non-blocking)
+            _ = LoadColleagueAbsencesAsync(today);
         }
         catch (Exception ex)
         {
@@ -235,6 +237,206 @@ public partial class DashboardViewModel : ObservableObject
         {
             IsLoading = false;
         }
+    }
+
+    /// <summary>
+    /// Load colleague absence data for today.
+    /// </summary>
+    private async Task LoadColleagueAbsencesAsync(DateTime date)
+    {
+        try
+        {
+            // Load current month's data
+            var colleagues = await _kelioService.GetColleagueAbsencesAsync(date.Year, date.Month);
+
+            // Also load next month's data for colleagues whose absence might extend beyond current month
+            var nextMonth = date.AddMonths(1);
+            List<ColleagueAbsenceDto>? nextMonthColleagues = null;
+            try
+            {
+                nextMonthColleagues = await _kelioService.GetColleagueAbsencesAsync(nextMonth.Year, nextMonth.Month);
+            }
+            catch
+            {
+                // Ignore errors loading next month - it's optional
+            }
+
+            // Filter to colleagues who are absent today and not the current user
+            var currentEmployeeId = _kelioService.EmployeeId;
+            var absentToday = colleagues
+                .Where(c => c.IsAbsentToday && c.EmployeeId != currentEmployeeId)
+                .Select(c =>
+                {
+                    // Find next month's data for this colleague (by employee ID or name)
+                    var nextMonthData = nextMonthColleagues?.FirstOrDefault(n =>
+                        n.EmployeeId == c.EmployeeId ||
+                        (n.EmployeeId == null && n.Name == c.Name));
+
+                    return new AbsentColleagueItem
+                    {
+                        Name = FormatColleagueName(c.Name),
+                        AbsenceInfo = "Abwesend",
+                        ReturnDate = CalculateReturnDate(c, nextMonthData, date)
+                    };
+                })
+                .OrderBy(c => c.Name)
+                .ToList();
+
+            // Update on UI thread
+            System.Windows.Application.Current.Dispatcher.Invoke(() =>
+            {
+                AbsentColleagues = new ObservableCollection<AbsentColleagueItem>(absentToday);
+                HasAbsentColleagues = AbsentColleagues.Count > 0;
+            });
+
+            Log.Information("LoadColleagueAbsencesAsync: Found {Count} absent colleagues today", absentToday.Count);
+        }
+        catch (Exception ex)
+        {
+            Log.Warning(ex, "Failed to load colleague absences");
+            // Don't show error to user - colleague absences are non-critical
+        }
+    }
+
+    /// <summary>
+    /// Format colleague name from "Lastname Firstname (ID)" to "Firstname Lastname".
+    /// </summary>
+    private static string FormatColleagueName(string fullName)
+    {
+        // Remove the ID suffix like " (14)"
+        var nameWithoutId = System.Text.RegularExpressions.Regex.Replace(fullName, @"\s*\(\d+\)$", "");
+
+        // Split by space and reverse (assumes "Lastname Firstname" format)
+        var parts = nameWithoutId.Split(' ', StringSplitOptions.RemoveEmptyEntries);
+        if (parts.Length >= 2)
+        {
+            // Swap first and last name
+            return $"{parts[1]} {parts[0]}";
+        }
+
+        return nameWithoutId;
+    }
+
+    /// <summary>
+    /// Calculate the return date based on absence days.
+    /// Finds the first workday after the end of the entire absence period,
+    /// including any subsequent absence blocks that follow shortly after gaps.
+    /// </summary>
+    private static string CalculateReturnDate(ColleagueAbsenceDto currentMonth, ColleagueAbsenceDto? nextMonth, DateTime today)
+    {
+        // Build a set of all absence dates across both months
+        var absenceDates = new HashSet<DateOnly>();
+
+        foreach (var day in currentMonth.AbsenceDays)
+        {
+            absenceDates.Add(new DateOnly(today.Year, today.Month, day));
+        }
+
+        if (nextMonth != null)
+        {
+            var nextMonthDate = new DateOnly(today.Year, today.Month, 1).AddMonths(1);
+            foreach (var day in nextMonth.AbsenceDays)
+            {
+                absenceDates.Add(new DateOnly(nextMonthDate.Year, nextMonthDate.Month, day));
+            }
+        }
+
+        if (absenceDates.Count == 0)
+        {
+            return "Unbekannt";
+        }
+
+        // Start from tomorrow and find the actual return date
+        var currentDate = DateOnly.FromDateTime(today).AddDays(1);
+        var maxLookAhead = 90; // Look ahead up to 90 days
+
+        for (var i = 0; i < maxLookAhead; i++)
+        {
+            var checkDate = currentDate.AddDays(i);
+            var isWeekend = checkDate.DayOfWeek is DayOfWeek.Saturday or DayOfWeek.Sunday;
+            var isAbsent = absenceDates.Contains(checkDate);
+
+            // Skip weekends and absence days
+            if (isWeekend || isAbsent)
+            {
+                continue;
+            }
+
+            // Found a potential return date (workday that's not absent)
+            // Check if there are more absences within the next 5 workdays
+            // This handles cases like: absent Mon-Thu, Friday free, absent next Mon-Fri
+            if (HasMoreAbsencesSoon(checkDate, absenceDates, workdaysToCheck: 5))
+            {
+                // There are more absences coming soon - this isn't the real return
+                continue;
+            }
+
+            // This is the actual return date
+            return FormatReturnDate(checkDate.ToDateTime(TimeOnly.MinValue));
+        }
+
+        return "Unbekannt";
+    }
+
+    /// <summary>
+    /// Check if there are absence days within the next N workdays from the given date.
+    /// This helps detect non-consecutive absence patterns like: absent, free Friday, absent next week.
+    /// </summary>
+    private static bool HasMoreAbsencesSoon(DateOnly fromDate, HashSet<DateOnly> absenceDates, int workdaysToCheck)
+    {
+        var workdaysChecked = 0;
+        var daysAhead = 1;
+
+        while (workdaysChecked < workdaysToCheck && daysAhead <= 14)
+        {
+            var checkDate = fromDate.AddDays(daysAhead);
+            var isWeekend = checkDate.DayOfWeek is DayOfWeek.Saturday or DayOfWeek.Sunday;
+
+            if (!isWeekend)
+            {
+                workdaysChecked++;
+                if (absenceDates.Contains(checkDate))
+                {
+                    return true;
+                }
+            }
+
+            daysAhead++;
+        }
+
+        return false;
+    }
+
+    /// <summary>
+    /// Skip to the next workday (Monday-Friday) if the date falls on a weekend.
+    /// </summary>
+    private static DateTime SkipToNextWorkday(DateTime date)
+    {
+        while (date.DayOfWeek == DayOfWeek.Saturday || date.DayOfWeek == DayOfWeek.Sunday)
+        {
+            date = date.AddDays(1);
+        }
+        return date;
+    }
+
+    /// <summary>
+    /// Format the return date with day name for better readability.
+    /// </summary>
+    private static string FormatReturnDate(DateTime date)
+    {
+        var dayName = date.DayOfWeek switch
+        {
+            DayOfWeek.Monday => "Montag",
+            DayOfWeek.Tuesday => "Dienstag",
+            DayOfWeek.Wednesday => "Mittwoch",
+            DayOfWeek.Thursday => "Donnerstag",
+            DayOfWeek.Friday => "Freitag",
+            DayOfWeek.Saturday => "Samstag",
+            DayOfWeek.Sunday => "Sonntag",
+            _ => ""
+        };
+
+        return $"Zurück am {dayName}, {date:dd.MM.}";
     }
 
     /// <summary>

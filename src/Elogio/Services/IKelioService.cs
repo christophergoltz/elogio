@@ -105,6 +105,14 @@ public interface IKelioService
     /// This is a fire-and-forget operation to improve perceived performance.
     /// </summary>
     void StartPostLoginPrefetch();
+
+    /// <summary>
+    /// Get colleague absence data from the group calendar for a specific month.
+    /// </summary>
+    /// <param name="year">The year</param>
+    /// <param name="month">The month (1-12)</param>
+    /// <returns>List of colleague absences, or empty list if failed</returns>
+    Task<List<ColleagueAbsenceDto>> GetColleagueAbsencesAsync(int year, int month);
 }
 
 /// <summary>

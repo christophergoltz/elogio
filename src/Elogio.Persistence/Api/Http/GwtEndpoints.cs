@@ -25,6 +25,9 @@ public static class GwtEndpoints
     public const string CalendarAbsenceNoCacheJs = "/open/bwt/intranet_calendrier_absence/intranet_calendrier_absence.nocache.js";
     public const string CalendarAbsenceCacheJs = "/open/bwt/intranet_calendrier_absence/B774D9023F6AE5125A0446A2F6C1BC19.cache.js";
 
+    // Group calendar (colleague absences) - uses form POST with embedded GWT data in response
+    public const string ColleagueAbsencePage = "/open/da";
+
     // App launcher
     public const string AppLauncherDeclaration = "/open/bwt/appLauncher.jsp?app=app_declaration_desktop&appParams=idMenuDeclaration=1";
 

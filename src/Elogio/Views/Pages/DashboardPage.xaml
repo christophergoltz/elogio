@@ -177,12 +177,22 @@
                         </Grid.RowDefinitions>
 
                         <!-- Header -->
-                        <TextBlock Grid.Row="0"
-                                   Text="Abwesende Kollegen"
-                                   FontSize="18"
-                                   FontWeight="SemiBold"
-                                   Foreground="{ui:ThemeResource TextFillColorPrimaryBrush}"
-                                   Margin="0,0,0,12" />
+                        <StackPanel Grid.Row="0" Orientation="Horizontal" Margin="0,0,0,12">
+                            <TextBlock Text="Abwesende Kollegen"
+                                       FontSize="18"
+                                       FontWeight="SemiBold"
+                                       Foreground="{ui:ThemeResource TextFillColorPrimaryBrush}" />
+                            <Border Background="#0078D4"
+                                    CornerRadius="4"
+                                    Padding="6,2"
+                                    Margin="8,0,0,0"
+                                    VerticalAlignment="Center">
+                                <TextBlock Text="Beta"
+                                           FontSize="11"
+                                           FontWeight="SemiBold"
+                                           Foreground="White" />
+                            </Border>
+                        </StackPanel>
 
                         <!-- Colleagues List -->
                         <ScrollViewer Grid.Row="1" VerticalAlignment="Top">
