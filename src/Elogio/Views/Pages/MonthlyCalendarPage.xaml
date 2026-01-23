@@ -13,15 +13,6 @@
       Loaded="Page_Loaded" d:DataContext="{d:DesignInstance vm:MonthlyCalendarViewModel}">
 
     <Page.Resources>
-        <!-- Day cell style - only apply to day cells, not all borders -->
-        <Style x:Key="DayCellStyle" TargetType="Border">
-            <Setter Property="BorderBrush" Value="Transparent" />
-            <Setter Property="BorderThickness" Value="0" />
-            <Setter Property="CornerRadius" Value="4" />
-            <Setter Property="Margin" Value="2" />
-            <Setter Property="Padding" Value="4" />
-        </Style>
-
         <!-- Diagonal stripe pattern for half holidays -->
         <DrawingBrush x:Key="HalfHolidayStripeBrush"
                       TileMode="Tile"
@@ -103,14 +94,13 @@
                                  VerticalAlignment="Center" />
             </Grid>
 
-            <ui:Card Padding="12">
-                <Grid>
-                    <Grid.RowDefinitions>
-                        <RowDefinition Height="Auto" />
-                        <RowDefinition Height="*" />
-                    </Grid.RowDefinitions>
+            <Grid>
+                <Grid.RowDefinitions>
+                    <RowDefinition Height="Auto" />
+                    <RowDefinition Height="*" />
+                </Grid.RowDefinitions>
 
-                    <!-- Day Headers -->
+                <!-- Day Headers -->
                 <ItemsControl Grid.Row="0" ItemsSource="{Binding DayHeaders}" Margin="0,0,0,8">
                     <ItemsControl.ItemsPanel>
                         <ItemsPanelTemplate>
@@ -142,8 +132,8 @@
                             <Border.Style>
                                 <Style TargetType="Border">
                                     <Setter Property="Background" Value="Transparent" />
-                                    <Setter Property="BorderBrush" Value="Transparent" />
-                                    <Setter Property="BorderThickness" Value="0" />
+                                    <Setter Property="BorderBrush" Value="{ui:ThemeResource ControlStrokeColorDefaultBrush}" />
+                                    <Setter Property="BorderThickness" Value="1" />
                                     <Style.Triggers>
                                         <DataTrigger Binding="{Binding IsCurrentMonth}" Value="False">
                                             <Setter Property="Opacity" Value="0.3" />
@@ -302,8 +292,7 @@
                 </DataTemplate>
                 </ItemsControl.ItemTemplate>
             </ItemsControl>
-                </Grid>
-            </ui:Card>
+            </Grid>
         </Grid>
 
         <!-- Summary -->
