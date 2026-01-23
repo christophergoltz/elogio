@@ -24,7 +24,7 @@ public partial class DashboardViewModel : ObservableObject
     #region Week Overview Properties
 
     [ObservableProperty]
-    private ObservableCollection<Models.DayOverviewItem> _weekDays = [];
+    private ObservableCollection<Models.DayOverviewItem>? _weekDays;
 
     [ObservableProperty]
     private string _weekRangeDisplay = string.Empty;
@@ -101,7 +101,7 @@ public partial class DashboardViewModel : ObservableObject
     #region Absent Colleagues (Placeholder)
 
     [ObservableProperty]
-    private ObservableCollection<AbsentColleagueItem> _absentColleagues = [];
+    private ObservableCollection<AbsentColleagueItem>? _absentColleagues;
 
     [ObservableProperty]
     private bool _hasAbsentColleagues;
@@ -140,11 +140,13 @@ public partial class DashboardViewModel : ObservableObject
     }
 
     /// <summary>
-    /// Initialize colleague data as empty (will be loaded asynchronously).
+    /// Initialize data as null to indicate loading state.
+    /// null = loading, non-null (even if empty) = loaded.
     /// </summary>
     private void InitializePlaceholderData()
     {
-        AbsentColleagues = [];
+        WeekDays = null;
+        AbsentColleagues = null;
         HasAbsentColleagues = false;
     }
 
@@ -444,7 +446,7 @@ public partial class DashboardViewModel : ObservableObject
     /// </summary>
     private void BuildWeekOverview(WeekPresenceDto weekData)
     {
-        WeekDays.Clear();
+        var newWeekDays = new ObservableCollection<Models.DayOverviewItem>();
 
         var today = DateOnly.FromDateTime(DateTime.Today);
         var dayNames = new[] { "Mo", "Di", "Mi", "Do", "Fr" };
@@ -495,7 +497,7 @@ public partial class DashboardViewModel : ObservableObject
                 item.State = DayOverviewState.UnderHours;
             }
 
-            WeekDays.Add(item);
+            newWeekDays.Add(item);
 
             // Always accumulate expected time for the full week
             totalExpected += dayData.ExpectedTime;
@@ -506,6 +508,9 @@ public partial class DashboardViewModel : ObservableObject
                 totalWorked += dayData.WorkedTime;
             }
         }
+
+        // Set the new collection (signals loading complete)
+        WeekDays = newWeekDays;
 
         // Update week totals
         WeeklyWorked = totalWorked;
@@ -656,7 +661,8 @@ public partial class DashboardViewModel : ObservableObject
 
     private void ResetToDefaultState()
     {
-        WeekDays.Clear();
+        WeekDays = null;
+        AbsentColleagues = null;
         ResetTodayBalance();
         _punchService.Reset();
     }

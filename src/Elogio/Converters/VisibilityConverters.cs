@@ -53,6 +53,23 @@ public class NullToVisibilityConverter : IValueConverter
 }
 
 /// <summary>
+/// Converts null to Visible, non-null to Collapsed.
+/// Useful for showing loading indicators while data is null.
+/// </summary>
+public class InverseNullToVisibilityConverter : IValueConverter
+{
+    public object Convert(object? value, Type targetType, object? parameter, CultureInfo culture)
+    {
+        return value is null ? Visibility.Visible : Visibility.Collapsed;
+    }
+
+    public object ConvertBack(object? value, Type targetType, object? parameter, CultureInfo culture)
+    {
+        throw new NotImplementedException();
+    }
+}
+
+/// <summary>
 /// Returns Visible if the DayCellState is MissingEntry, otherwise Collapsed.
 /// </summary>
 public class MissingEntryToVisibilityConverter : IValueConverter

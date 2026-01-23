@@ -81,21 +81,25 @@
             </StackPanel>
         </StackPanel>
 
-        <!-- Loading overlay -->
-        <Grid Grid.Row="2"
-              Visibility="{Binding IsLoading, Converter={StaticResource BoolToVisibilityConverter}}"
-              Panel.ZIndex="1">
-            <Border Background="{ui:ThemeResource ApplicationBackgroundBrush}" Opacity="0.8" />
-            <StackPanel VerticalAlignment="Center" HorizontalAlignment="Center">
-                <ui:ProgressRing IsIndeterminate="True" Width="50" Height="50" />
-                <TextBlock Text="Lade Jahreskalender..." Margin="0,16,0,0" />
-            </StackPanel>
-        </Grid>
+        <!-- Month Cards Card with Loading Overlay -->
+        <Grid Grid.Row="2">
+            <!-- Loading Overlay (outside Card to cover entire area) -->
+            <Grid Visibility="{Binding IsLoading, Converter={StaticResource BoolToVisibilityConverter}}"
+                  Panel.ZIndex="1">
+                <Border Background="{ui:ThemeResource ApplicationBackgroundBrush}"
+                        Opacity="0.9"
+                        CornerRadius="8" />
+                <ui:ProgressRing IsIndeterminate="True"
+                                 Width="32"
+                                 Height="32"
+                                 HorizontalAlignment="Center"
+                                 VerticalAlignment="Center" />
+            </Grid>
 
-        <!-- Month Cards Grid (4x3) -->
-        <ScrollViewer Grid.Row="2" VerticalScrollBarVisibility="Auto">
-            <ItemsControl ItemsSource="{Binding Months}"
-                          Visibility="{Binding IsLoading, Converter={StaticResource InverseBoolToVisibilityConverter}}">
+            <ui:Card Padding="8">
+                <!-- Month Cards Grid (4x3) -->
+                <ScrollViewer VerticalScrollBarVisibility="Auto">
+                    <ItemsControl ItemsSource="{Binding Months}">
                 <ItemsControl.ItemsPanel>
                     <ItemsPanelTemplate>
                         <UniformGrid Rows="4" Columns="3" />
@@ -224,8 +228,10 @@
                         </ui:Card>
                     </DataTemplate>
                 </ItemsControl.ItemTemplate>
-            </ItemsControl>
-        </ScrollViewer>
+                    </ItemsControl>
+                </ScrollViewer>
+            </ui:Card>
+        </Grid>
 
         <!-- Year Summary -->
         <ui:Card Grid.Row="3" Margin="0,16,0,0" Padding="16">

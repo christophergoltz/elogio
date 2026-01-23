@@ -88,38 +88,47 @@
             </StackPanel>
         </Grid>
 
-        <!-- Day Headers -->
-        <ItemsControl Grid.Row="1" ItemsSource="{Binding DayHeaders}" Margin="0,0,0,8">
-            <ItemsControl.ItemsPanel>
-                <ItemsPanelTemplate>
-                    <UniformGrid Rows="1" Columns="7" />
-                </ItemsPanelTemplate>
-            </ItemsControl.ItemsPanel>
-            <ItemsControl.ItemTemplate>
-                <DataTemplate>
-                    <TextBlock Text="{Binding}"
-                               HorizontalAlignment="Center"
-                               FontWeight="SemiBold"
-                               Foreground="{ui:ThemeResource TextFillColorSecondaryBrush}" />
-                </DataTemplate>
-            </ItemsControl.ItemTemplate>
-        </ItemsControl>
-
-        <!-- Calendar Grid -->
-        <Grid Grid.Row="2" Margin="0,0,0,4" ClipToBounds="False">
-            <!-- Loading overlay -->
+        <!-- Calendar Card (Day Headers + Calendar Grid) -->
+        <Grid Grid.Row="1" Grid.RowSpan="2">
+            <!-- Loading Overlay (outside Card to cover entire area) -->
             <Grid Visibility="{Binding IsLoading, Converter={StaticResource BoolToVisibilityConverter}}"
                   Panel.ZIndex="1">
-                <Border Background="{ui:ThemeResource ApplicationBackgroundBrush}" Opacity="0.8" />
-                <StackPanel VerticalAlignment="Center" HorizontalAlignment="Center">
-                    <ui:ProgressRing IsIndeterminate="True" Width="50" Height="50" />
-                    <TextBlock Text="Loading..." Margin="0,16,0,0" />
-                </StackPanel>
+                <Border Background="{ui:ThemeResource ApplicationBackgroundBrush}"
+                        Opacity="0.9"
+                        CornerRadius="8" />
+                <ui:ProgressRing IsIndeterminate="True"
+                                 Width="32"
+                                 Height="32"
+                                 HorizontalAlignment="Center"
+                                 VerticalAlignment="Center" />
             </Grid>
 
-            <!-- Calendar cells -->
-            <ItemsControl ItemsSource="{Binding DayCells}"
-                          Visibility="{Binding IsLoading, Converter={StaticResource InverseBoolToVisibilityConverter}}">
+            <ui:Card Padding="12">
+                <Grid>
+                    <Grid.RowDefinitions>
+                        <RowDefinition Height="Auto" />
+                        <RowDefinition Height="*" />
+                    </Grid.RowDefinitions>
+
+                    <!-- Day Headers -->
+                <ItemsControl Grid.Row="0" ItemsSource="{Binding DayHeaders}" Margin="0,0,0,8">
+                    <ItemsControl.ItemsPanel>
+                        <ItemsPanelTemplate>
+                            <UniformGrid Rows="1" Columns="7" />
+                        </ItemsPanelTemplate>
+                    </ItemsControl.ItemsPanel>
+                    <ItemsControl.ItemTemplate>
+                        <DataTemplate>
+                            <TextBlock Text="{Binding}"
+                                       HorizontalAlignment="Center"
+                                       FontWeight="SemiBold"
+                                       Foreground="{ui:ThemeResource TextFillColorSecondaryBrush}" />
+                        </DataTemplate>
+                    </ItemsControl.ItemTemplate>
+                </ItemsControl>
+
+                <!-- Calendar cells -->
+                <ItemsControl Grid.Row="1" ItemsSource="{Binding DayCells}">
                 <ItemsControl.ItemsPanel>
                     <ItemsPanelTemplate>
                         <UniformGrid Rows="6" Columns="7" />
@@ -293,6 +302,8 @@
                 </DataTemplate>
                 </ItemsControl.ItemTemplate>
             </ItemsControl>
+                </Grid>
+            </ui:Card>
         </Grid>
 
         <!-- Summary -->
